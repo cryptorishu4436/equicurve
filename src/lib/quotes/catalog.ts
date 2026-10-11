@@ -165,6 +165,10 @@ export function isQuoteId(value: string): value is QuoteId {
   return BY_ID.has(value);
 }
 
+export function isDesignQuote(value: string): boolean {
+  return value === "CUSTOM" || isQuoteId(value);
+}
+
 export function getQuoteAsset(id: QuoteId): (typeof QUOTE_ASSETS)[number] {
   const asset = BY_ID.get(id);
   if (!asset) throw new Error(`Unknown quote ${id}.`);

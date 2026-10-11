@@ -200,7 +200,7 @@ export const lpLockSchema = z.number().int().min(LIMITS.lpLockMin).max(100);
 
 export const sectorSchema = z.enum(SECTORS);
 export const presetIdSchema = z.enum(PRESET_IDS);
-export const quoteSchema = z.enum(QUOTES);
+export const quoteSchema = z.union([z.enum(QUOTES), z.literal("CUSTOM")]);
 export const clusterSchema = z.enum(CLUSTERS);
 
 /** Off-chain, creator-authored descriptive profile stored in the registry. */
@@ -260,7 +260,7 @@ export type WizardValidationInput = {
   /** Token image URL (optional, https). */
   image?: string;
   raiseTarget: number;
-  quote: QuoteId;
+  quote: QuoteId | "CUSTOM";
   seedBuy: string;
   presetId: string;
   feeIssuer: number;
@@ -277,10 +277,11 @@ function check<T>(schema: z.ZodType<T>, value: unknown): string | undefined {
 }
 
 /** Validate seed-buy amount string for the chosen quote (exact decimals). */
-export function validateSeedBuy(value: string, quote: QuoteId): string | undefined {
+export function validateSeedBuy(value: string, quote: QuoteId | "CUSTOM", decimalsOverride?: number): string | undefined {
   const s = (value ?? "").trim();
   if (s === "" || /^0*(\.0*)?$/.test(s)) return undefined; // 0 / blank = no seed buy
-  const decimals = quoteDecimals(quote);
+  if (quote === "CUSTOM" && decimalsOverride == null) return "Check the custom quote mint before entering a seed buy.";
+  const decimals = quote === "CUSTOM" ? decimalsOverride! : quoteDecimals(quote);
   try {
     parseUiAmount(s, decimals, {
       max: LIMITS.seedBuyMaxWhole * 10n ** BigInt(decimals),

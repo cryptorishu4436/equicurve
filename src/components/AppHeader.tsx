@@ -18,6 +18,7 @@ const RESOURCES = [
   { href: "/trust", label: "Trust Center", description: "Understand the rules and risks" },
   { href: "/docs", label: "Documentation", description: "Learn how EquiCurve works" },
   { href: "/trade", label: "Open a trade", description: "Look up a pool by address" },
+  { href: "/terminal", label: "Terminal", description: "Lifecycle and deployment check" },
   { href: "/graduate", label: "Graduation", description: "Inspect a pool’s migration" },
   { href: "/settings", label: "Settings", description: "Network and local data" },
 ];

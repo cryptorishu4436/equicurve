@@ -152,9 +152,10 @@ export function formatAtoms(
 /** Format with a catalog quote label. */
 export function formatQuoteAtoms(
   value: bigint | BN | string | number,
-  quote: QuoteId,
+  quote: QuoteId | "CUSTOM",
   maxFractionDigits?: number,
 ): string {
+  if (quote === "CUSTOM") return `${String(value)} atoms`;
   const decimals = quoteDecimals(quote);
   return `${formatAtoms(value, decimals, maxFractionDigits ?? (decimals <= 6 ? 4 : 6))} ${quote}`;
 }

@@ -151,7 +151,7 @@ export function FeeClaimsCard({ pool, quote = "SOL" }: Props) {
           <h2 className="font-semibold text-fg-primary">Trading fee claims</h2>
           <p className="mt-0.5 text-xs text-fg-muted">
             Creator vs partner (feeClaimer) are separate SDK paths. Quote
-            decimals: `${quoteDecimals(quote)} (${quote})`.
+            decimals: {quote === "CUSTOM" ? "custom quote" : `${quoteDecimals(quote)} (${quote})`}.
           </p>
         </div>
         <button

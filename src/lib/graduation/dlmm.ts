@@ -1,10 +1,11 @@
-import DLMM, { ActivationType } from "@meteora-ag/dlmm";
+import DLMM, { ActivationType, StrategyType } from "@meteora-ag/dlmm";
 import { BN } from "@coral-xyz/anchor";
-import type { Connection, PublicKey, Transaction } from "@solana/web3.js";
+import { Keypair, type Connection, type PublicKey, type Transaction } from "@solana/web3.js";
 import {
   feeBpsFromBaseFactor,
   type DlmmGraduation,
 } from "./plan";
+import { dlmmRangeMatches } from "./range";
 
 export type DlmmObservation = {
   pool: string;
@@ -79,6 +80,60 @@ export function dlmmObservationMatches(
   }
   return {
     ok: true,
-    reason: "Bin step and fee match the graduation plan. The planned range is the issuer's liquidity width and is not stored on the empty pair.",
+    reason: "Bin step and fee match the graduation plan. The position width is a separate check.",
+  };
+}
+
+/**
+ * Open a spot position across the planned bins and add the issuer's amounts.
+ * One side may be zero. Both zero is refused. The position keypair must sign.
+ */
+export async function buildDlmmLiquidityTransaction(args: {
+  connection: Connection;
+  pool: PublicKey;
+  plan: DlmmGraduation;
+  owner: PublicKey;
+  amountX: BN;
+  amountY: BN;
+}): Promise<{ transaction: Transaction; position: Keypair; minBinId: number; maxBinId: number }> {
+  if (args.amountX.isNeg() || args.amountY.isNeg() || (args.amountX.isZero() && args.amountY.isZero())) {
+    throw new Error("Provide a base amount, a quote amount, or both. Zero on both sides adds no liquidity.");
+  }
+  const pair = await DLMM.create(args.connection, args.pool);
+  const active = Number(pair.lbPair.activeId);
+  if (!Number.isInteger(active)) throw new Error("DLMM active bin could not be read.");
+  const minBinId = active - args.plan.rangeBins;
+  const maxBinId = active + args.plan.rangeBins;
+  const position = Keypair.generate();
+  const transaction = await pair.initializePositionAndAddLiquidityByStrategy({
+    positionPubKey: position.publicKey,
+    totalXAmount: args.amountX,
+    totalYAmount: args.amountY,
+    strategy: { minBinId, maxBinId, strategyType: StrategyType.Spot },
+    user: args.owner,
+    slippage: 1,
+  });
+  return { transaction, position, minBinId, maxBinId };
+}
+
+/** Compare the owner's positions on this pair with the planned width. */
+export async function readDlmmRange(args: {
+  connection: Connection;
+  pool: PublicKey;
+  owner: PublicKey;
+  plan: DlmmGraduation;
+}): Promise<{ ok: boolean; reason: string; lowerBinId: number | null; upperBinId: number | null }> {
+  const pair = await DLMM.create(args.connection, args.pool);
+  const found = await pair.getPositionsByUserAndLbPair(args.owner);
+  const positions = found.userPositions.map((row) => ({
+    lowerBinId: Number(row.positionData.lowerBinId),
+    upperBinId: Number(row.positionData.upperBinId),
+  }));
+  const match = positions.find((row) => dlmmRangeMatches(args.plan, row).ok) ?? positions[0] ?? null;
+  const verdict = dlmmRangeMatches(args.plan, match);
+  return {
+    ...verdict,
+    lowerBinId: match?.lowerBinId ?? null,
+    upperBinId: match?.upperBinId ?? null,
   };
 }

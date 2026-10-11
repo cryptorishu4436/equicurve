@@ -54,9 +54,11 @@ export function entryFromChain(args: {
   dammPool?: string | null;
   /** Undefined keeps the previous design. Null clears nothing by itself; pass the next value. */
   design?: RegistryDesign | null;
+  /** Set only after a badge and decimal check. Never inferred from a missing label. */
+  customQuote?: boolean;
 }): RegistryLaunch | null {
   const { snapshot: s, profile, prev, cluster, nowIso, usdcMints, auth } = args;
-  const quote = supportedQuoteLabel(s.quoteMint, usdcMints);
+  const quote = supportedQuoteLabel(s.quoteMint, usdcMints) ?? (args.customQuote ? "CUSTOM" : null);
   if (s.configRead !== true || !quote) return null;
   const status = chainStatusFromCurve(s.curve, s.quoteReserve);
   const base = profile ?? {
@@ -128,6 +130,7 @@ export async function authorizeRegistration(args: {
   lookup: (pool: string) => Promise<ChainLookupResult>;
   getExisting: (pool: string) => Promise<RegistryLaunch | null>;
   usdcMints: readonly string[];
+  acceptCustomQuote?: (mint: string) => Promise<boolean>;
 }): Promise<RegistryWriteResult> {
   const parsed = signedLaunchBodySchema.safeParse(args.body);
   if (!parsed.success) {
@@ -153,7 +156,16 @@ export async function authorizeRegistration(args: {
     return fail(503, "rpc_unavailable", "RPC unavailable — could not verify pool on-chain. Retry shortly.");
   }
   const snap = chain.snapshot;
-  const quoteError = quoteVerificationError(snap, args.usdcMints);
+  let customQuote = false;
+  let quoteError = quoteVerificationError(snap, args.usdcMints);
+  if (quoteError && snap.quoteMint && args.acceptCustomQuote) {
+    try {
+      customQuote = await args.acceptCustomQuote(snap.quoteMint);
+    } catch {
+      return fail(503, "rpc_unavailable", "Quote mint could not be checked. Retry shortly.");
+    }
+    if (customQuote) quoteError = null;
+  }
   if (quoteError) return quoteError;
   if (snap.baseMint !== payload.mint) {
     return fail(400, "mint_mismatch", "payload.mint does not match the pool's on-chain base mint");
@@ -180,6 +192,7 @@ export async function authorizeRegistration(args: {
     usdcMints: args.usdcMints,
     auth: { signer: v.signer, issuedAt: body.auth.issuedAt },
     design: nextDesign,
+    customQuote,
   });
   const unchanged =
     !!existing &&
@@ -201,6 +214,7 @@ export async function refreshFromChain(args: {
   getExisting: (pool: string) => Promise<RegistryLaunch | null>;
   usdcMints: readonly string[];
   verifyDamm?: (snapshot: PoolSnapshot) => Promise<string | null>;
+  acceptCustomQuote?: (mint: string) => Promise<boolean>;
 }): Promise<RegistryWriteResult> {
   const parsed = refreshBodySchema.safeParse(args.body);
   if (!parsed.success) {
@@ -216,7 +230,16 @@ export async function refreshFromChain(args: {
     return fail(503, "rpc_unavailable", "RPC unavailable — could not refresh from chain");
   }
   let dammPool: string | null | undefined;
-  const quoteError = quoteVerificationError(chain.snapshot, args.usdcMints);
+  let customQuote = false;
+  let quoteError = quoteVerificationError(chain.snapshot, args.usdcMints);
+  if (quoteError && chain.snapshot.quoteMint && args.acceptCustomQuote) {
+    try {
+      customQuote = await args.acceptCustomQuote(chain.snapshot.quoteMint);
+    } catch {
+      return fail(503, "rpc_unavailable", "Quote mint could not be checked. Retry shortly.");
+    }
+    if (customQuote) quoteError = null;
+  }
   if (quoteError) return quoteError;
   if (chain.snapshot.isMigrated && args.verifyDamm) {
     dammPool = await args.verifyDamm(chain.snapshot);
@@ -229,6 +252,7 @@ export async function refreshFromChain(args: {
     nowIso: new Date(args.nowMs).toISOString(),
     usdcMints: args.usdcMints,
     dammPool,
+    customQuote,
   });
   if (!entry) return fail(503, "config_unavailable", "Pool configuration could not be verified");
   return { ok: true, entry, unchanged: false };

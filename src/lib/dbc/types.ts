@@ -4,7 +4,7 @@ import type { DbcPoolKind } from "./poolAccount";
 
 export type PresetId = "flat" | "exponential" | "long" | "equity" | "short";
 
-export type QuoteLabel = QuoteId;
+export type QuoteLabel = QuoteId | "CUSTOM";
 
 export type { TransferProfile } from "./transferHook";
 
@@ -21,6 +21,8 @@ export type LaunchFormInput = {
   seedBuyAmount: string;
   antiSniper: boolean;
   quoteLabel?: QuoteLabel;
+  /** Checked custom quote. When set, this mint is used instead of the catalog quote. */
+  customQuote?: { mint: string; decimals: 6 | 7 | 8 | 9 };
   feeClaimer?: string;
   /** open-spl | token-2022 | transfer-hook */
   transferProfile?: import("./transferHook").TransferProfile;

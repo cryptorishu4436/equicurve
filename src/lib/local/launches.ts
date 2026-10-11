@@ -27,6 +27,8 @@ export type StoredLaunch = {
   thesis: string;
   sector: Sector;
   quote: QuoteLabel;
+  /** On-chain quote mint. Present for launches stored after custom quotes. */
+  quoteMint?: string;
   /** Present when Create stored a post-curve venue. Older records omit it. */
   graduation?: GraduationAttestation;
   raiseTarget: number;

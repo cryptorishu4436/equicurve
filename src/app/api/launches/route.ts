@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { MAX_SIGNED_BODY_BYTES } from "@/lib/auth/launchAuth";
 import { getCluster } from "@/lib/constants";
+import { getServerConnection } from "@/lib/connection";
+import { inspectQuoteMint } from "@/lib/quotes/inspect";
 import { invalidateExploreCache } from "@/lib/explore/discover";
 import { authorizeRegistration, refreshFromChain } from "@/lib/registry/authorize";
 import { serverLookup, serverVerifyDamm, USDC_MINTS } from "@/lib/registry/chain";
@@ -53,6 +55,10 @@ export async function POST(req: Request) {
     lookup: serverLookup,
     getExisting: getRegistryLaunch,
     usdcMints: USDC_MINTS,
+    acceptCustomQuote: async (mint) => {
+      const inspected = await inspectQuoteMint(getServerConnection(), mint);
+      return inspected.ok && inspected.label === "CUSTOM";
+    },
   });
   if (!result.ok) return err(result.status, result.error, result.code);
   try {
@@ -91,6 +97,10 @@ export async function PATCH(req: Request) {
     getExisting: getRegistryLaunch,
     usdcMints: USDC_MINTS,
     verifyDamm: serverVerifyDamm,
+    acceptCustomQuote: async (mint) => {
+      const inspected = await inspectQuoteMint(getServerConnection(), mint);
+      return inspected.ok && (inspected.label === "CUSTOM" || inspected.badge === "present");
+    },
   });
   if (!result.ok) return err(result.status, result.error, result.code);
   try {

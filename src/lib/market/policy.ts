@@ -12,6 +12,7 @@ import type { PresetId } from "@/lib/dbc/types";
 import { EquiCurveError } from "@/lib/errors";
 import { parseGraduationPlan } from "@/lib/graduation/plan";
 import { isQuoteId, quoteDecimals as decimalsOfQuote } from "@/lib/quotes/catalog";
+import { assessQuoteMark } from "@/lib/quotes/mark";
 import { LIMITS } from "@/lib/validation";
 import { openBook } from "./book";
 import { runCohortStress } from "./cohorts";
@@ -66,8 +67,12 @@ const OBJECTIVES = new Set<LaunchBrief["objective"]>([
 const OBSERVED_NOTE =
   "No live launches are attached. Every score on this policy comes from the simulator.";
 
-function quoteDecimals(quote: LaunchBrief["quote"]) {
-  return decimalsOfQuote(quote);
+function quoteDecimals(brief: LaunchBrief) {
+  if (brief.customQuote) return brief.customQuote.decimals;
+  if (brief.quote === "CUSTOM") {
+    throw new EquiCurveError("A custom quote needs a checked mint and decimals.", "VALIDATION");
+  }
+  return decimalsOfQuote(brief.quote);
 }
 
 function roundCap(n: number): number {
@@ -101,7 +106,9 @@ type ParsedBrief = {
 export function parseBrief(input: LaunchBrief): ParsedBrief {
   if (!ASSETS.has(input.asset)) throw new EquiCurveError("Unknown asset kind.", "VALIDATION");
   if (!OBJECTIVES.has(input.objective)) throw new EquiCurveError("Unknown market objective.", "VALIDATION");
-  if (!isQuoteId(input.quote)) {
+  if (input.quote === "CUSTOM") {
+    if (!input.customQuote) throw new EquiCurveError("A custom quote needs a checked mint and decimals.", "VALIDATION");
+  } else if (!isQuoteId(input.quote)) {
     throw new EquiCurveError("Unknown quote asset.", "VALIDATION");
   }
   let graduation: LaunchBrief["graduation"];
@@ -138,7 +145,7 @@ export function parseBrief(input: LaunchBrief): ParsedBrief {
   if (!Number.isInteger(seed) || seed < 0) {
     throw new EquiCurveError("Seed must be a non-negative integer.", "VALIDATION");
   }
-  const decimals = quoteDecimals(input.quote);
+  const decimals = quoteDecimals(input);
   let targetAtoms: bigint;
   let typicalAtoms: bigint;
   try {
@@ -347,6 +354,7 @@ function evaluateOne(parsed: ParsedBrief, presetId: PresetId, multiple: number):
     creatorTradingFeePercentage: built.creatorTradingFeePercentage,
     lpLockPct: built.partnerPermanentLockedLiquidityPercentage,
     antiSniper: parsed.antiSniper,
+    ...(parsed.brief.customQuote ? { quoteDecimals: parsed.decimals } : {}),
   };
   const assumptions = scenarioAssumptions(parsed.brief.asset);
   const scenarios = namedScenarios({
@@ -530,6 +538,7 @@ export function passesConstraintBudget(row: CandidateReport, budget: ConstraintB
 
 /** True when this row may be signed. An unresolved search is never deployable. */
 export function deploymentAllowed(policy: LaunchPolicy, row: CandidateReport = policy.chosen): boolean {
+  if (policy.quoteMark && policy.quoteMark.status !== "not-set" && policy.quoteMark.status !== "passed") return false;
   if (policy.negotiation.status === "satisfied") return row.feasible;
   if (policy.negotiation.status === "accepted") return passesConstraintBudget(row, policy.negotiation.applied);
   return false;
@@ -667,6 +676,14 @@ export function designPolicy(
   if (parsed.brief.graduation?.venue === "dlmm") {
     limits.push("The DLMM plan is a separate pool opened after DAMM v2 migration. It does not change the curve fingerprint.");
   }
+  const quoteMark = assessQuoteMark({
+    mark: parsed.brief.quoteMark,
+    initialMarketCap: chosen.recipe.initialMarketCap,
+    supply: parsed.supply,
+  });
+  if (quoteMark.status === "blocked" || quoteMark.status === "unavailable") {
+    limits.push(quoteMark.note);
+  }
   const configHash = recipeConfigHash(chosen.recipe);
   const why = whyLines(parsed, chosen, alternatives[0], priorities, search);
   if (status === "needs-decision") {
@@ -695,6 +712,7 @@ export function designPolicy(
     negotiation,
     observedLaunches: null,
     observedNote: OBSERVED_NOTE,
+    quoteMark,
   };
 }
 
@@ -707,7 +725,7 @@ export function materializeRecipe(recipe: PolicyRecipe): ConfigParameters {
     lpLockPct: recipe.lpLockPct,
     mintRenounce: true,
     antiSniper: recipe.antiSniper,
-    quoteDecimals: quoteDecimals(recipe.quote),
+    quoteDecimals: recipe.quoteDecimals ?? (recipe.quote === "CUSTOM" ? 9 : decimalsOfQuote(recipe.quote)),
     transferProfile: "open-spl",
     marketCaps: { initial: recipe.initialMarketCap, migration: recipe.migrationMarketCap },
   });

@@ -43,8 +43,17 @@ const graduationInputSchema = z.discriminatedUnion("venue", [
 
 export const designRequestSchema = z.object({
   schemaVersion: z.literal("1"),
-  quote: z.enum(QUOTE_ID_LIST),
+  quote: z.union([z.enum(QUOTE_ID_LIST), z.literal("CUSTOM")]),
   graduation: graduationInputSchema.optional(),
+  customQuote: z.object({
+    mint: z.string().trim().min(32).max(50),
+    decimals: z.union([z.literal(6), z.literal(7), z.literal(8), z.literal(9)]),
+  }).strict().optional(),
+  quoteMark: z.object({
+    referenceUsd: z.string().trim().min(1).max(40),
+    maxGapBps: z.number().int().min(0).max(100_000),
+    quoteUsd: z.string().trim().min(1).max(40),
+  }).strict().optional(),
   raiseTarget: decimal,
   typicalTrade: decimal,
   participants: z.number().int().min(1).max(1_000_000),
@@ -99,6 +108,8 @@ function briefFromRequest(input: DesignApiRequest): LaunchBrief {
     stressPaths: input.market.stressPaths,
     seed: input.market.seed,
     ...(input.graduation ? { graduation: parseGraduationPlan(input.graduation) } : {}),
+    ...(input.customQuote ? { customQuote: input.customQuote } : {}),
+    ...(input.quoteMark ? { quoteMark: input.quoteMark } : {}),
   };
 }
 
@@ -163,6 +174,7 @@ export function serializeDesign(policy: LaunchPolicy) {
       search: policy.search,
       brief: policy.brief,
       graduation: attestGraduation(policy.brief.graduation),
+      quoteMark: policy.quoteMark ?? null,
       targetRaiseAtoms: policy.targetRaiseAtoms,
     },
   };
@@ -240,7 +252,7 @@ export function robustnessFromReference(reference: SelectedDesignReference) {
   }
 }
 
-function publicConfig(config: ReturnType<typeof materializeRecipe>, quote: LaunchBrief["quote"]) {
+function publicConfig(config: ReturnType<typeof materializeRecipe>, brief: LaunchBrief) {
   const c = config as unknown as Record<string, unknown>;
   const poolFees = (c.poolFees ?? {}) as Record<string, unknown>;
   const baseFee = (poolFees.baseFee ?? {}) as Record<string, unknown>;
@@ -248,10 +260,19 @@ function publicConfig(config: ReturnType<typeof materializeRecipe>, quote: Launc
   const curve = Array.isArray(c.curve) ? c.curve as Array<Record<string, unknown>> : [];
   const atom = (value: unknown) => typeof value === "bigint" ? value.toString(10) : value == null ? null : String(value);
   const object = (value: Record<string, unknown> | null | undefined) => value ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, atom(item)])) : null;
-  const resolved = resolveActiveQuote(quote);
+  const resolved = brief.quote === "CUSTOM" || brief.customQuote
+    ? {
+        decimals: brief.customQuote?.decimals ?? 9,
+        mint: brief.customQuote?.mint ?? null,
+        available: Boolean(brief.customQuote),
+        unavailableReason: brief.customQuote ? null : "Custom quote mint is missing.",
+        issuer: null,
+        claim: "Custom quote mint. The launched token is not this asset.",
+      }
+    : resolveActiveQuote(brief.quote);
   return {
     quote: {
-      label: quote,
+      label: brief.quote,
       decimals: resolved.decimals,
       mint: resolved.mint,
       availableOnCluster: resolved.available,
@@ -321,7 +342,7 @@ export function configFromReference(reference: SelectedDesignReference) {
       design: { policyId: policy.policyId, candidateId: candidate.profileId, fingerprint: candidate.configFingerprint },
       requestedConstraints: policy.negotiation.requested,
       acceptedConstraints: policy.negotiation.applied,
-      config: publicConfig(config, policy.brief.quote),
+      config: publicConfig(config, policy.brief),
       canonicalConfig: canonicalMarketConfig(config),
       integrity,
       provenance: "canonical_meteora_launch_config",

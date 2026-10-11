@@ -81,7 +81,7 @@ export function sqrtPriceToPriceString(sqrtPrice: bigint, baseDecimals: number, 
 export function buildLaunchReview(i: LaunchReviewInput): LaunchReview {
   const errors: string[] = [];
   const rows: ReviewRow[] = [];
-  const quoteDecimals = decimalsOfQuote(i.quote);
+  const quoteDecimals = i.quote === "CUSTOM" ? 9 : decimalsOfQuote(i.quote);
   const baseDecimals = 9;
   const preset = getPreset(i.presetId);
   const fee = FEE_BY_PRESET[i.presetId];
@@ -109,7 +109,9 @@ export function buildLaunchReview(i: LaunchReviewInput): LaunchReview {
     tokenAuthorityOption: number;
   };
   const threshold = cfg.migrationQuoteThreshold.toString();
-  const caps = marketCapsForQuote(i.presetId, i.quote, i.marketCaps);
+  const caps = i.quote === "CUSTOM"
+    ? i.marketCaps ?? { initial: 1, migration: 15 }
+    : marketCapsForQuote(i.presetId, i.quote, i.marketCaps);
   const shared = !!i.sharedConfig;
   if (shared && i.marketCaps) {
     errors.push(

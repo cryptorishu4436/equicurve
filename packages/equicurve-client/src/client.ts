@@ -111,6 +111,13 @@ export class EquiCurveClient {
     if (response.design.fingerprint !== reference.selection.fingerprint || response.robustness.fingerprint !== reference.selection.fingerprint) throw new EquiCurveProtocolError("Robustness fingerprint does not match the design reference.");
     return response;
   }
+  async verifyDeployment(pool: string): Promise<{ ok: boolean; verified: boolean; reason: string | null }> {
+    const payload = await this.get(`/api/v1/deployments/${encodeURIComponent(pool)}/verify`);
+    const value = record(payload, "Verify response");
+    if (typeof value.verified !== "boolean") throw new EquiCurveProtocolError("Verify response is missing verified.");
+    const reason = value.reason == null ? null : stringField(value.reason, "Verify reason");
+    return { ok: value.ok === true, verified: value.verified, reason };
+  }
   async buildConfig(reference: DesignReference): Promise<ConfigResponse> {
     assertReference(reference);
     const response = validateConfig(await this.post<ConfigResponse>("/api/v1/config", reference));
@@ -125,6 +132,15 @@ export class EquiCurveClient {
     const fingerprint = pipeline.design.result.preferred.fingerprint;
     assertFingerprint(fingerprint, "Design fingerprint");
     if (pipeline.robustness.robustness.fingerprint !== fingerprint || pipeline.config.integrity.designFingerprint !== fingerprint || pipeline.config.integrity.configFingerprint !== fingerprint) throw new EquiCurveProtocolError("Pipeline fingerprints do not match.");
+  }
+  private async get(path: string): Promise<unknown> {
+    let response: Response;
+    try { response = await this.fetcher(this.baseUrl + path); }
+    catch { throw new EquiCurveTransportError("Could not reach EquiCurve at " + this.baseUrl + "."); }
+    let payload: unknown;
+    try { payload = await response.json(); } catch { throw new EquiCurveTransportError("EquiCurve returned non-JSON data for " + path + ".", response.status); }
+    if (!payload || typeof payload !== "object") throw new EquiCurveProtocolError("Verify response is malformed.");
+    return payload;
   }
   private async post<T>(path: string, body: unknown): Promise<T> {
     let response: Response;

@@ -61,6 +61,11 @@ export type WizardState = {
   dlmmBinStep: DlmmBinStep;
   dlmmFeeBps: number;
   dlmmRangeBins: number;
+  customQuoteMint: string;
+  customQuoteDecimals: 6 | 7 | 8 | 9 | null;
+  quoteMarkReferenceUsd: string;
+  quoteMarkMaxGapBps: number;
+  quoteMarkUsd: string;
   /** Exact decimal string in quote units (converted to atoms without floats). */
   seedBuy: string;
   jurisdictions: string;
@@ -152,6 +157,11 @@ export const INITIAL_WIZARD: WizardState = {
   dlmmBinStep: 25,
   dlmmFeeBps: 100,
   dlmmRangeBins: 10,
+  customQuoteMint: "",
+  customQuoteDecimals: null,
+  quoteMarkReferenceUsd: "",
+  quoteMarkMaxGapBps: 150,
+  quoteMarkUsd: "",
   seedBuy: "0",
   jurisdictions: "",
   investorType: "Retail-friendly",
@@ -248,7 +258,8 @@ export function applyWizardPatch(s: WizardState, p: Partial<WizardState>): Wizar
 function briefReady(s: WizardState): boolean {
   if (!Number.isInteger(s.participants) || s.participants < 1 || s.participants > 1_000_000) return false;
   try {
-    const decimals = quoteDecimals(s.quote);
+    const decimals = s.quote === "CUSTOM" ? s.customQuoteDecimals : quoteDecimals(s.quote);
+    if (decimals == null) return false;
     const target = parseUiAmount(s.targetRaise, decimals);
     const typical = parseUiAmount(s.typicalTrade, decimals);
     return target > 0n && typical > 0n && typical <= target * 1_000n;

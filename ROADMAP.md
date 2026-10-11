@@ -61,14 +61,14 @@ Developer Preview routes and planned follow-ons:
 | **SHIPPED** | `POST /api/v1/design` | Return evaluated candidates, constraint conflicts, Pareto frontier, preferred candidate, policy/config identity, and explicit requested-versus-applied feasibility semantics. |
 | **SHIPPED** | `POST /api/v1/robustness` | Evaluate the same exact selected design under documented synthetic shocks without substituting a configuration. |
 | **SHIPPED** | `POST /api/v1/config` | Return fingerprint-bound canonical market configuration; wallet and transaction inputs remain outside the preview. |
-| **PLANNED** | `GET /api/v1/deployments/:pool/verify` | Compare recorded design/configuration with chain readback and report unavailable evidence explicitly. |
-| **PLANNED** | `GET /api/v1/markets/:pool` | Return normalized lifecycle state with observation context. |
+| **SHIPPED** | `GET /api/v1/deployments/:pool/verify` | Compare recorded design/configuration with chain readback and report unavailable evidence explicitly. |
+| **SHIPPED** | `GET /api/v1/markets/:pool` | Return normalized lifecycle state with observation context. |
 
 The shipped preview includes strict Zod validation, machine-readable error codes, version metadata, deterministic fixtures, and compatibility tests. OpenAPI generation and request IDs remain planned.
 
 ### TypeScript SDK and examples
 
-The shipped source-only `EquiCurveClient` exposes `design()`, `getDesignReference()`, `robustness()`, `buildConfig()`, and `assertPipelineIntegrity()`. It remains a thin client with no duplicated market math or independent candidate-ranking implementation. `verifyDeployment()` and `getMarket()` remain planned.
+The shipped source-only `EquiCurveClient` exposes `design()`, `getDesignReference()`, `robustness()`, `buildConfig()`, `verifyDeployment()`, and `assertPipelineIntegrity()`. It remains a thin client with no duplicated market math or independent candidate-ranking implementation. `getMarket()` remains planned.
 
 Reference integration status:
 

@@ -12,6 +12,7 @@ import {
   type QuoteLabel,
 } from "@/lib/constants";
 import { assertQuoteDeployable } from "@/lib/quotes/resolve";
+import { inspectQuoteMint } from "@/lib/quotes/inspect";
 import { resolvePartnerFeeClaimer } from "@/lib/presets/published";
 import { assertUsdcOverrideMint } from "./usdcOverride";
 import { AmountError, formatAtomsExact, parseUiAmountToBN } from "@/lib/amounts";
@@ -210,19 +211,41 @@ export async function prepareLaunchTransaction(args: {
   // Mint+update authority is only valid on transfer-hook configs (Meteora docs).
   const effectiveMintRenounce = wantsTransferHook ? mintRenounce : true;
 
-  const quoteLabel: QuoteLabel = input.quoteLabel ?? "SOL";
-  let resolved: ReturnType<typeof assertQuoteDeployable>;
-  try {
-    resolved = assertQuoteDeployable(quoteLabel);
-  } catch (error) {
-    throw new EquiCurveError(error instanceof Error ? error.message : "Quote is not deployable.", "VALIDATION");
+  const quoteLabel: QuoteLabel = input.customQuote ? "CUSTOM" : input.quoteLabel ?? "SOL";
+  let quoteMint: PublicKey;
+  let quoteDecimals: 6 | 7 | 8 | 9;
+  if (input.customQuote) {
+    const inspected = await inspectQuoteMint(connection, input.customQuote.mint);
+    if (!inspected.ok) throw new EquiCurveError(inspected.reason, "VALIDATION");
+    if (inspected.decimals !== input.customQuote.decimals) {
+      throw new EquiCurveError(
+        `Quote mint reports ${inspected.decimals} decimals. The checked value was ${input.customQuote.decimals}.`,
+        "VALIDATION",
+      );
+    }
+    quoteMint = new PublicKey(inspected.mint);
+    quoteDecimals = inspected.decimals;
+  } else {
+    if (quoteLabel === "CUSTOM") {
+      throw new EquiCurveError("A custom quote needs a checked mint.", "VALIDATION");
+    }
+    let resolved: ReturnType<typeof assertQuoteDeployable>;
+    try {
+      resolved = assertQuoteDeployable(quoteLabel);
+    } catch (error) {
+      throw new EquiCurveError(error instanceof Error ? error.message : "Quote is not deployable.", "VALIDATION");
+    }
+    if (!resolved.mint) {
+      throw new EquiCurveError(resolved.unavailableReason ?? "Quote mint is unavailable.", "VALIDATION");
+    }
+    if (quoteLabel === "USDC") await assertUsdcOverrideMint(connection);
+    if (quoteLabel !== "SOL" && quoteLabel !== "USDC") {
+      const inspected = await inspectQuoteMint(connection, resolved.mint);
+      if (!inspected.ok) throw new EquiCurveError(inspected.reason, "VALIDATION");
+    }
+    quoteMint = new PublicKey(resolved.mint);
+    quoteDecimals = resolved.decimals;
   }
-  if (!resolved.mint) {
-    throw new EquiCurveError(resolved.unavailableReason ?? "Quote mint is unavailable.", "VALIDATION");
-  }
-  if (quoteLabel === "USDC") await assertUsdcOverrideMint(connection);
-  const quoteMint = new PublicKey(resolved.mint);
-  const quoteDecimals = resolved.decimals;
 
   let feeClaimer = payer;
   const claimerInput = resolvePartnerFeeClaimer(input.presetId, input.feeClaimer ?? "");
@@ -265,7 +288,9 @@ export async function prepareLaunchTransaction(args: {
     } satisfies LaunchKeypairs);
 
   const preset = getPreset(input.presetId);
-  const caps = marketCapsForQuote(input.presetId, quoteLabel, input.marketCaps);
+  const caps = quoteLabel === "CUSTOM"
+    ? input.marketCaps ?? { initial: 1, migration: 15 }
+    : marketCapsForQuote(input.presetId, quoteLabel, input.marketCaps);
   let thresholdAtoms = "";
   let mode: PreparedLaunch["mode"];
   let configPubkey: PublicKey;
@@ -557,17 +582,30 @@ export async function prepareLaunchTransaction(args: {
 export function planLaunchAddresses(args: {
   quoteLabel: QuoteLabel;
   keypairs: LaunchKeypairs;
+  customMint?: string;
 }): { pool: string; mint: string; config: string; quoteMint: string } {
-  let resolved: ReturnType<typeof assertQuoteDeployable>;
-  try {
-    resolved = assertQuoteDeployable(args.quoteLabel);
-  } catch (error) {
-    throw new EquiCurveError(error instanceof Error ? error.message : "Quote is not deployable.", "VALIDATION");
+  let quoteMint: PublicKey;
+  if (args.customMint) {
+    try {
+      quoteMint = new PublicKey(args.customMint);
+    } catch {
+      throw new EquiCurveError("Custom quote mint is not a Solana address.", "VALIDATION");
+    }
+  } else {
+    if (args.quoteLabel === "CUSTOM") {
+      throw new EquiCurveError("A custom quote needs a checked mint.", "VALIDATION");
+    }
+    let resolved: ReturnType<typeof assertQuoteDeployable>;
+    try {
+      resolved = assertQuoteDeployable(args.quoteLabel);
+    } catch (error) {
+      throw new EquiCurveError(error instanceof Error ? error.message : "Quote is not deployable.", "VALIDATION");
+    }
+    if (!resolved.mint) {
+      throw new EquiCurveError(resolved.unavailableReason ?? "Quote mint is unavailable.", "VALIDATION");
+    }
+    quoteMint = new PublicKey(resolved.mint);
   }
-  if (!resolved.mint) {
-    throw new EquiCurveError(resolved.unavailableReason ?? "Quote mint is unavailable.", "VALIDATION");
-  }
-  const quoteMint = new PublicKey(resolved.mint);
   const config = getOptionalPoolConfigKey() ?? args.keypairs.config.publicKey;
   const pool = deriveDbcPoolAddress(quoteMint, args.keypairs.baseMint.publicKey, config);
   return {

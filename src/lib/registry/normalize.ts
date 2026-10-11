@@ -64,7 +64,9 @@ export function coerceStoredLaunch(raw: unknown): RegistryLaunch | null {
   const quoteMint = isValidPublicKey(r.quoteMint) ? r.quoteMint : null;
   const chainQuote = supportedQuoteLabel(quoteMint, registryUsdcMints());
   // Legacy labels remain unverified claims; unknown mints are never relabelled SOL.
-  const quote = chainQuote ?? (!quoteMint && (r.quote === "SOL" || r.quote === "USDC") ? r.quote : null);
+  const quote = chainQuote
+    ?? (quoteMint && r.quote === "CUSTOM" ? "CUSTOM" : null)
+    ?? (!quoteMint && (r.quote === "SOL" || r.quote === "USDC") ? r.quote : null);
   if (!quote) return null;
   const verified = !!chainQuote && typeof r.authSigner === "string" && typeof r.chainCheckedAt === "string";
   const now = new Date().toISOString();

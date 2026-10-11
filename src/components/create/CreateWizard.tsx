@@ -61,6 +61,20 @@ import {
   type TransferProfile,
 } from "@/lib/dbc/transferHook";
 
+function wizardQuote(state: WizardState) {
+  if (state.quote === "CUSTOM") {
+    const ready = Boolean(state.customQuoteMint && state.customQuoteDecimals);
+    return {
+      mint: ready ? state.customQuoteMint : null,
+      decimals: (state.customQuoteDecimals ?? 9) as 6 | 7 | 8 | 9,
+      available: ready,
+      unavailableReason: ready ? null : "Paste a quote mint and wait for the decimal and badge check.",
+      claim: "Custom quote mint. The launched token is not this asset.",
+    };
+  }
+  return wizardQuote(state);
+}
+
 function graduationNote(state: Parameters<typeof wizardGraduation>[0]): string {
   try {
     return attestGraduation(wizardGraduation(state)).note;
@@ -143,6 +157,8 @@ export function CreateWizard() {
           presetId: scheduled.presetId,
           raiseTarget: scheduled.raiseTarget,
           quote: scheduled.quote,
+          customQuoteMint: scheduled.customQuote?.mint ?? "",
+          customQuoteDecimals: scheduled.customQuote?.decimals ?? null,
           totalSupply: scheduled.totalSupply,
           seedBuy: scheduled.seedBuy,
           feeIssuer: scheduled.feeIssuerPct,
@@ -168,7 +184,7 @@ export function CreateWizard() {
     const built = buildLaunchReview({
       presetId: state.presetId,
       quote: state.quote,
-      quoteMint: resolveActiveQuote(state.quote).mint,
+      quoteMint: wizardQuote(state).mint,
       transferProfile: state.transferProfile,
       totalSupply: state.totalSupply,
       creatorPct: state.feeIssuer,
@@ -194,8 +210,8 @@ export function CreateWizard() {
     return built;
   }, [state, walletAddr]);
   const plannedAddresses = useMemo(
-    () => launchKeypairs ? planLaunchAddresses({ quoteLabel: state.quote, keypairs: launchKeypairs }) : null,
-    [launchKeypairs, state.quote],
+    () => launchKeypairs ? planLaunchAddresses({ quoteLabel: state.quote, keypairs: launchKeypairs, customMint: state.quote === "CUSTOM" ? state.customQuoteMint : undefined }) : null,
+    [launchKeypairs, state.quote, state.customQuoteMint],
   );
 
   function patch(p: Partial<WizardState>) {
@@ -275,7 +291,7 @@ export function CreateWizard() {
         lpLockPct: state.lpLockPct,
         mintRenounce: state.mintRenounce,
         antiSniper: state.antiSniper,
-        quoteDecimals: resolveActiveQuote(state.quote).decimals,
+        quoteDecimals: wizardQuote(state).decimals,
         transferProfile: state.transferProfile,
         marketCaps: state.marketCaps,
       });
@@ -295,6 +311,9 @@ export function CreateWizard() {
         presetId: state.presetId,
         raiseTarget: state.raiseTarget,
         quote: state.quote,
+        ...(state.quote === "CUSTOM" && state.customQuoteMint && state.customQuoteDecimals
+          ? { customQuote: { mint: state.customQuoteMint, decimals: state.customQuoteDecimals } }
+          : {}),
         totalSupply: state.totalSupply,
         seedBuy: state.seedBuy.trim(),
         feeIssuerPct: state.feeIssuer,
@@ -386,7 +405,7 @@ export function CreateWizard() {
           lpLockPct: state.lpLockPct,
           mintRenounce: state.mintRenounce,
           antiSniper: state.antiSniper,
-          quoteDecimals: resolveActiveQuote(state.quote).decimals,
+          quoteDecimals: wizardQuote(state).decimals,
           transferProfile: state.transferProfile,
           marketCaps: state.marketCaps,
         });
@@ -436,7 +455,7 @@ export function CreateWizard() {
         if (!chk.ok) throw new Error(`Token image rejected: ${chk.error}`);
       }
       if (!launchKeypairs) throw new Error("Launch identities are still being prepared. Try again in a moment.");
-      const planned = planLaunchAddresses({ quoteLabel: state.quote, keypairs: launchKeypairs });
+      const planned = planLaunchAddresses({ quoteLabel: state.quote, keypairs: launchKeypairs, customMint: state.quote === "CUSTOM" ? state.customQuoteMint : undefined });
       const cluster = getCluster();
       const description = state.thesis.trim();
       const website = state.website.trim() ? normalizeHttpsUrl(state.website) : null;
@@ -539,6 +558,9 @@ export function CreateWizard() {
             seedBuyAmount: state.seedBuy,
             antiSniper: state.antiSniper,
             quoteLabel: state.quote,
+            ...(state.quote === "CUSTOM" && state.customQuoteMint && state.customQuoteDecimals
+              ? { customQuote: { mint: state.customQuoteMint, decimals: state.customQuoteDecimals } }
+              : {}),
             feeClaimer: resolvePartnerFeeClaimer(state.presetId, state.feeClaimer) || undefined,
             transferProfile: state.transferProfile,
             marketCaps: state.marketCaps ?? undefined,
@@ -665,6 +687,7 @@ export function CreateWizard() {
         thesis: state.thesis,
         sector: state.sector,
         quote: prepared.quoteLabel,
+        quoteMint: prepared.quoteMint,
         graduation: attestGraduation(wizardGraduation(state)),
         raiseTarget: state.raiseTarget,
         website: website ?? undefined,
@@ -1133,8 +1156,80 @@ function StepGoals({
             </select>
           </label>
           <p className="text-xs text-fg-muted">
-            {resolveActiveQuote(state.quote).claim} The target raise is in {state.quote} units and is what the search tries to hit as migrationQuoteThreshold.
-            {resolveActiveQuote(state.quote).unavailableReason ? ` ${resolveActiveQuote(state.quote).unavailableReason}` : ""}
+            {wizardQuote(state).claim} The target raise is in {state.quote} units and is what the search tries to hit as migrationQuoteThreshold.
+            {wizardQuote(state).unavailableReason ? ` ${wizardQuote(state).unavailableReason}` : ""}
+          </p>
+          <label className="block space-y-1.5">
+            <span className="ec-label">Custom quote mint</span>
+            <input
+              className="ec-input font-mono text-xs"
+              placeholder="Paste a mint. SOL and USDC do not need this."
+              value={state.customQuoteMint}
+              onChange={(e) => patch({ customQuoteMint: e.target.value.trim(), customQuoteDecimals: null, quote: e.target.value.trim() ? "CUSTOM" : "SOL" })}
+            />
+          </label>
+          <button
+            type="button"
+            className="ec-btn-secondary"
+            onClick={() => {
+              void (async () => {
+                const response = await fetch("/api/v1/quotes/inspect", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ mint: state.customQuoteMint }),
+                });
+                const body = await response.json() as { ok?: boolean; decimals?: 6 | 7 | 8 | 9; reason?: string; label?: string };
+                if (!body.ok || body.decimals == null) {
+                  patch({ customQuoteDecimals: null });
+                  toast.error(body.reason ?? "Quote mint was not accepted.");
+                  return;
+                }
+                patch({ quote: body.label === "SOL" || body.label === "USDC" ? body.label : body.label && body.label !== "CUSTOM" ? state.quote : "CUSTOM", customQuoteDecimals: body.decimals });
+                toast.success(body.label === "CUSTOM" ? `Custom quote accepted at ${body.decimals} decimals.` : `${body.label} quote checked.`);
+              })();
+            }}
+          >
+            Check mint decimals and badge
+          </button>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="space-y-1">
+              <span className="ec-label">Reference USD price</span>
+              <input className="ec-input font-mono" value={state.quoteMarkReferenceUsd} placeholder="Optional" onChange={(e) => patch({ quoteMarkReferenceUsd: e.target.value.trim() })} />
+            </label>
+            <label className="space-y-1">
+              <span className="ec-label">Max gap (bps)</span>
+              <input className="ec-input font-mono" type="number" min={0} value={state.quoteMarkMaxGapBps} onChange={(e) => patch({ quoteMarkMaxGapBps: Number(e.target.value) })} />
+            </label>
+            <label className="space-y-1">
+              <span className="ec-label">Quote token USD</span>
+              <input className="ec-input font-mono" value={state.quoteMarkUsd} placeholder="From the market" onChange={(e) => patch({ quoteMarkUsd: e.target.value.trim() })} />
+            </label>
+          </div>
+          <button
+            type="button"
+            className="ec-btn-secondary"
+            onClick={() => {
+              const mint = wizardQuote(state).mint;
+              if (!mint) {
+                toast.error("Choose a quote mint before reading its market price.");
+                return;
+              }
+              void fetch(`/api/v1/quotes/mark?mint=${encodeURIComponent(mint)}`)
+                .then((response) => response.json())
+                .then((body: { quoteUsd?: string | null; reason?: string | null }) => {
+                  if (!body.quoteUsd) {
+                    toast.error("Quote market price is unavailable. The mark limit will not pass until a price is entered.");
+                    return;
+                  }
+                  patch({ quoteMarkUsd: body.quoteUsd });
+                })
+                .catch(() => toast.error("Quote market price is unavailable."));
+            }}
+          >
+            Read quote token price
+          </button>
+          <p className="text-xs text-fg-muted">
+            The reference is the USD price you want one launched token to open at. The quote price converts the curve into USD. Widen the gap only on purpose. A blank reference leaves the limit off.
           </p>
         </fieldset>
         <fieldset className="space-y-2">
@@ -1188,9 +1283,9 @@ function StepGoals({
             value={state.seedBuy}
             onChange={(e) => patch({ seedBuy: e.target.value.trim() })}
           />
-          {validateSeedBuy(state.seedBuy, state.quote) && (
+          {validateSeedBuy(state.seedBuy, state.quote, state.customQuoteDecimals ?? undefined) && (
             <p className="text-xs text-signal-danger">
-              {validateSeedBuy(state.seedBuy, state.quote)}
+              {validateSeedBuy(state.seedBuy, state.quote, state.customQuoteDecimals ?? undefined)}
             </p>
           )}
           <p className="text-xs text-fg-muted">

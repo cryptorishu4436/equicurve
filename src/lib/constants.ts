@@ -6,6 +6,7 @@ import {
 import { NATIVE_MINT } from "@solana/spl-token";
 import { PublicKey } from "@solana/web3.js";
 import { stockQuoteForMint, type QuoteId } from "@/lib/quotes/catalog";
+export type { QuoteLabel } from "@/lib/dbc/types";
 
 export const DBC_PROGRAM_ID = DYNAMIC_BONDING_CURVE_PROGRAM_ID;
 export const DAMM_V2_PROGRAM = DAMM_V2_PROGRAM_ID;
@@ -20,7 +21,7 @@ export const USDC_MINT_DEVNET = new PublicKey(
   "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
 );
 
-export type { QuoteId as QuoteLabel } from "@/lib/quotes/catalog";
+
 
 /**
  * Devnet/testnet only: a 6-decimal SPL mint used as the "USDC" quote instead

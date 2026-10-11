@@ -665,7 +665,7 @@ export function OfferingDetailClient({ id, demo }: Props) {
                 quoteLabel={quote}
                 progress={progressPct == null ? null : progressPct / 100}
                 illustrative={illustrative}
-                priceMultiple={presetPriceMultiple(presetId, quote === "USDC" ? "USDC" : isQuoteId(String(quote)) && isStockQuote(String(quote) as QuoteLabel) ? "STOCK" : "SOL")}
+                priceMultiple={presetPriceMultiple(presetId, quote === "USDC" ? "USDC" : isQuoteId(quote) && isStockQuote(quote) ? "STOCK" : "SOL")}
                 historicalOnly={lifecycle.activeVenue === "DAMM v2"}
                 metricMode={metricMode}
                 denomination={denomination}

@@ -10,6 +10,7 @@ import { formatAtomsExact } from "@/lib/amounts";
 import { CURVE_PRESETS, FEE_BY_PRESET, presetPriceMultiple } from "@/lib/dbc/presets";
 import { designPolicy } from "@/lib/market/policy";
 import { publishedPresetCard } from "@/lib/presets/published";
+import { PublishConfigButton } from "@/components/presets/PublishConfigButton";
 
 function illustrativePolicy() {
   try {
@@ -68,6 +69,7 @@ export default function PresetsPage() {
         <p className="text-xs text-fg-muted">
           Quotes: {published.quotes.map((quote) => quote.symbol).join(", ")}. Stock mints are mainnet-only. A stock quote is not a share.
         </p>
+        <PublishConfigButton />
       </section>
 
       <details className="ec-card space-y-4 p-6">

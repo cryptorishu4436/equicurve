@@ -104,7 +104,7 @@ export function MarketDesignStep({
   const [editorEpoch, setEditorEpoch] = useState(0);
   const [adjustingBudget, setAdjustingBudget] = useState(false);
   const shared = getOptionalPoolConfigKey();
-  const decimals = quoteDecimals(state.quote);
+  const decimals = state.quote === "CUSTOM" ? state.customQuoteDecimals ?? 9 : quoteDecimals(state.quote);
   const assumptions = scenarioAssumptions(state.assetKind);
   const currentKey = `${briefKey(state)}|${budgetKey(state.constraintDraft)}`;
   const stale = policy != null && ranKey !== currentKey;
@@ -130,6 +130,18 @@ export function MarketDesignStep({
             antiSniper: state.antiSniper,
             stressPaths: state.stressPaths,
             graduation: wizardGraduation(state),
+            ...(state.quote === "CUSTOM" && state.customQuoteMint && state.customQuoteDecimals
+              ? { customQuote: { mint: state.customQuoteMint, decimals: state.customQuoteDecimals } }
+              : {}),
+            ...(state.quoteMarkReferenceUsd.trim()
+              ? {
+                  quoteMark: {
+                    referenceUsd: state.quoteMarkReferenceUsd.trim(),
+                    maxGapBps: state.quoteMarkMaxGapBps,
+                    quoteUsd: state.quoteMarkUsd.trim(),
+                  },
+                }
+              : {}),
           },
           accepted ? { acceptedBudget: accepted } : undefined,
         );

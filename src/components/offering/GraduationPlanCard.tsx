@@ -2,6 +2,7 @@
 
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
+import BN from "bn.js";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { DlmmGraduation, GraduationAttestation } from "@/lib/graduation/plan";
@@ -26,6 +27,10 @@ export function GraduationPlanCard({
   const { connection } = useConnection();
   const wallet = useWallet();
   const [busy, setBusy] = useState(false);
+  const [dlmmPool, setDlmmPool] = useState("");
+  const [amountX, setAmountX] = useState("0");
+  const [amountY, setAmountY] = useState("0");
+  const [rangeNote, setRangeNote] = useState<string | null>(null);
   const dlmm: DlmmGraduation | null = plan.plan.venue === "dlmm" ? plan.plan : null;
 
   async function openPool() {
@@ -41,7 +46,7 @@ export function GraduationPlanCard({
         creator: wallet.publicKey,
       });
       const sig = await signAndSendTransaction({ connection, wallet, tx: built.transaction });
-      toast.success(`DLMM pair opened. Signature ${sig.slice(0, 8)}…`);
+      toast.success(`DLMM pair opened. Signature ${sig.slice(0, 8)}… Paste the pair address below to add the planned liquidity.`);
     } catch (error) {
       toast.error(toUserMessage(error));
     } finally {
@@ -63,6 +68,49 @@ export function GraduationPlanCard({
         <button type="button" className="ec-btn-secondary" disabled={busy || !wallet.publicKey} onClick={() => void openPool()}>
           {busy ? "Opening…" : "Open designed DLMM pool"}
         </button>
+      ) : null}
+      {dlmm ? (
+        <div className="space-y-2">
+          <input className="ec-input font-mono text-xs" placeholder="DLMM pair address" value={dlmmPool} onChange={(e) => setDlmmPool(e.target.value.trim())} />
+          <div className="grid grid-cols-2 gap-2">
+            <input className="ec-input font-mono text-xs" value={amountX} onChange={(e) => setAmountX(e.target.value.trim())} aria-label="Token X atoms" />
+            <input className="ec-input font-mono text-xs" value={amountY} onChange={(e) => setAmountY(e.target.value.trim())} aria-label="Token Y atoms" />
+          </div>
+          <button
+            type="button"
+            className="ec-btn-secondary"
+            disabled={busy || !wallet.publicKey || !dlmmPool}
+            onClick={() => {
+              void (async () => {
+                if (!wallet.publicKey || !dlmm) return;
+                setBusy(true);
+                try {
+                  const { buildDlmmLiquidityTransaction, readDlmmRange } = await import("@/lib/graduation/dlmm");
+                  const built = await buildDlmmLiquidityTransaction({
+                    connection,
+                    pool: new PublicKey(dlmmPool),
+                    plan: dlmm,
+                    owner: wallet.publicKey,
+                    amountX: new BN(amountX || "0"),
+                    amountY: new BN(amountY || "0"),
+                  });
+                  built.transaction.partialSign(built.position);
+                  const sig = await signAndSendTransaction({ connection, wallet, tx: built.transaction });
+                  const read = await readDlmmRange({ connection, pool: new PublicKey(dlmmPool), owner: wallet.publicKey, plan: dlmm });
+                  setRangeNote(read.reason);
+                  toast.success(read.ok ? `Liquidity added. ${sig.slice(0, 8)}…` : `Transaction sent. ${read.reason}`);
+                } catch (error) {
+                  toast.error(toUserMessage(error));
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+          >
+            Add liquidity across the planned range
+          </button>
+          {rangeNote ? <p className="text-xs text-fg-muted">{rangeNote}</p> : null}
+        </div>
       ) : null}
     </section>
   );

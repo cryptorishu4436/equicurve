@@ -127,9 +127,9 @@ export default function PortfolioPage() {
     const failures: string[] = [];
     for (const launch of launches.filter((item) => item.dammPool)) {
       try {
-        const resolved = resolveActiveQuote(launch.quote);
-        const quoteMint = resolved.mint ? new PublicKey(resolved.mint) : null;
-        if (!quoteMint || !launch.dammPool) throw new Error(resolved.unavailableReason ?? "Quote mint unavailable on this cluster.");
+        const resolvedMint = launch.quote === "CUSTOM" ? launch.quoteMint ?? null : resolveActiveQuote(launch.quote).mint;
+        const quoteMint = resolvedMint ? new PublicKey(resolvedMint) : null;
+        if (!quoteMint || !launch.dammPool) throw new Error("Quote mint unavailable on this cluster.");
         const pool = new PublicKey(launch.dammPool);
         const lpRead = await withReadConnection(connection, async (readConnection) => {
           const verified = await fetchDammPoolSnapshot({

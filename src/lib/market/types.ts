@@ -1,5 +1,7 @@
 import type { PresetId, QuoteLabel } from "@/lib/dbc/types";
 import type { GraduationPlan } from "@/lib/graduation/plan";
+import type { QuoteMarkAssessment, QuoteMarkInput } from "@/lib/quotes/mark";
+import type { QuoteDecimals } from "@/lib/quotes/catalog";
 
 /** What the issuer says the token is. This does not create legal rights. */
 export type AssetKind =
@@ -50,6 +52,10 @@ export type LaunchBrief = {
    * A DLMM plan does not change the curve fingerprint.
    */
   graduation?: GraduationPlan;
+  /** Pasted quote mint that passed the decimal and badge check. */
+  customQuote?: { mint: string; decimals: QuoteDecimals };
+  /** Opening USD reference. Omitted means the search does not apply a mark limit. */
+  quoteMark?: QuoteMarkInput;
 };
 
 export type ScenarioId = "retail" | "whale" | "late" | "sell-pressure" | "volatile";
@@ -106,6 +112,8 @@ export type PolicyRecipe = {
   creatorTradingFeePercentage: number;
   lpLockPct: number;
   antiSniper: boolean;
+  /** Set for a custom quote. Catalog quotes keep using the quote id. */
+  quoteDecimals?: 6 | 7 | 8 | 9;
 };
 
 export type DynamicFeeStatus = "simulated" | "base-only" | "not-used";
@@ -269,6 +277,7 @@ export type LaunchPolicy = {
   negotiation: ConstraintNegotiation;
   observedLaunches: null;
   observedNote: string;
+  quoteMark?: QuoteMarkAssessment;
 };
 
 export type SearchCoverage = {
