@@ -9,6 +9,7 @@ import { CurveMiniViz } from "@/components/ui/CurveMiniViz";
 import { formatAtomsExact } from "@/lib/amounts";
 import { CURVE_PRESETS, FEE_BY_PRESET, presetPriceMultiple } from "@/lib/dbc/presets";
 import { designPolicy } from "@/lib/market/policy";
+import { publishedPresetCard } from "@/lib/presets/published";
 
 function illustrativePolicy() {
   try {
@@ -29,6 +30,7 @@ function illustrativePolicy() {
 
 export default function PresetsPage() {
   const sample = illustrativePolicy();
+  const published = publishedPresetCard();
   return (
     <div className="space-y-8">
       <header>
@@ -43,6 +45,30 @@ export default function PresetsPage() {
           <PresetShapeNote />
         </div>
       </header>
+
+      <section className="ec-card space-y-3 p-6" data-testid="published-equity-preset">
+        <p className="ec-eyebrow">Published config</p>
+        <h2 className="text-lg font-medium text-fg-primary">{published.name}</h2>
+        <p className="max-w-3xl text-sm text-fg-secondary">{published.summary}</p>
+        <p className="max-w-3xl text-sm text-fg-secondary">{published.legal}</p>
+        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          <div>
+            <dt className="text-fg-muted">Partner fee claimer</dt>
+            <dd className="break-all font-mono text-xs text-fg-primary">{published.fee.partnerFeeClaimer ?? "Deployer wallet"}</dd>
+            <dd className="text-xs text-fg-muted">{published.fee.partnerFeeClaimerSource}</dd>
+          </div>
+          <div>
+            <dt className="text-fg-muted">Fee split of each trade</dt>
+            <dd className="text-fg-primary">Creator {published.fee.creatorPct}% · Partner {published.fee.partnerPct}% · Protocol {published.fee.protocolPct}%</dd>
+          </div>
+        </dl>
+        <p className="text-xs text-fg-muted">
+          Suggested limits before you sign: threshold gap {published.constraints.maxThresholdGap}, typical impact {published.constraints.maxReferenceImpactBps} bps, whale impact {published.constraints.maxWhaleImpactBps} bps, concentration {published.constraints.maxConcentration}, retail fill {published.constraints.minRetailProgress}. The search still has to pass these, or you have to accept a wider budget.
+        </p>
+        <p className="text-xs text-fg-muted">
+          Quotes: {published.quotes.map((quote) => quote.symbol).join(", ")}. Stock mints are mainnet-only. A stock quote is not a share.
+        </p>
+      </section>
 
       <details className="ec-card space-y-4 p-6">
         <summary className="text-base font-medium text-fg-primary">Inside a sample simulation <span className="ml-2 text-xs font-normal text-fg-muted">Illustrative brief · synthetic evidence</span></summary>

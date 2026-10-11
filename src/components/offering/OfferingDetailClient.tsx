@@ -12,6 +12,7 @@ import { FeeClaimsCard } from "@/components/issuer/FeeClaimsCard";
 import { EligibilityGate, useEligibilityGate } from "@/components/gate/EligibilityGate";
 import { PriceHistoryChart } from "@/components/offering/PriceHistoryChart";
 import { GraduationCard } from "@/components/offering/GraduationCard";
+import { GraduationPlanCard } from "@/components/offering/GraduationPlanCard";
 import { presetPriceMultiple } from "@/lib/dbc/presets";
 import { IssuerFaq } from "@/components/issuer/IssuerAnswers";
 import { MetadataEditor } from "@/components/offering/MetadataEditor";
@@ -35,7 +36,8 @@ import {
   quoteLabelForMint,
 } from "@/lib/constants";
 import { fetchPoolSnapshot } from "@/lib/dbc/migrate";
-import type { PoolSnapshot } from "@/lib/dbc/types";
+import type { PoolSnapshot, QuoteLabel } from "@/lib/dbc/types";
+import { isQuoteId, isStockQuote } from "@/lib/quotes/catalog";
 import type { DesignedMarket } from "@/lib/market/types";
 import type { DemoOffering } from "@/lib/demo/offerings";
 import type { PublicRegistryLaunch } from "@/lib/registry/types";
@@ -351,9 +353,12 @@ export function OfferingDetailClient({ id, demo }: Props) {
     demo?.thesis ??
     "On-chain pool opened via EquiCurve Create. Trade on-curve; graduate to DAMM v2 when ready.";
   const sector = launch?.sector ?? registryLaunch?.sector ?? demo?.sector ?? "Other";
-  const quote = snapshot?.quoteMint
-    ? quoteLabelForMint(snapshot.quoteMint)
-    : launch?.quote ?? registryLaunch?.quote ?? demo?.quote ?? "SOL";
+  const quote =
+    (snapshot?.quoteMint ? quoteLabelForMint(snapshot.quoteMint) : null) ??
+    launch?.quote ??
+    registryLaunch?.quote ??
+    demo?.quote ??
+    "SOL";
   const lockPct = snapshot?.lockPct ?? launch?.lockPct ?? demo?.lockPct ?? 10;
   const holderRows = holders.supplyAtoms != null && holders.decimals != null
     ? tokenAccountDistribution({
@@ -660,7 +665,7 @@ export function OfferingDetailClient({ id, demo }: Props) {
                 quoteLabel={quote}
                 progress={progressPct == null ? null : progressPct / 100}
                 illustrative={illustrative}
-                priceMultiple={presetPriceMultiple(presetId, quote === "USDC" ? "USDC" : "SOL")}
+                priceMultiple={presetPriceMultiple(presetId, quote === "USDC" ? "USDC" : isQuoteId(String(quote)) && isStockQuote(String(quote) as QuoteLabel) ? "STOCK" : "SOL")}
                 historicalOnly={lifecycle.activeVenue === "DAMM v2"}
                 metricMode={metricMode}
                 denomination={denomination}
@@ -715,6 +720,14 @@ export function OfferingDetailClient({ id, demo }: Props) {
                     quoteLabel={quote}
                   />
                   <GraduationStatusCard view={gradView} snapshot={snapshot} compact />
+                  {launch?.graduation ? (
+                    <GraduationPlanCard
+                      plan={launch.graduation}
+                      baseMint={snapshot?.baseMint ?? launch.mint ?? null}
+                      quoteMint={snapshot?.quoteMint ?? null}
+                      migrated={snapshot?.isMigrated === true}
+                    />
+                  ) : null}
                 </div>
               )}
               {poolAddress &&
@@ -1111,7 +1124,7 @@ export function OfferingDetailClient({ id, demo }: Props) {
             {poolAddress && !illustrative && (
               <FeeClaimsCard
                 pool={poolAddress}
-                quote={quote === "USDC" ? "USDC" : "SOL"}
+                quote={isQuoteId(String(quote)) ? (quote as QuoteLabel) : "SOL"}
               />
             )}
             <div className="ec-card p-4 text-xs text-fg-muted">

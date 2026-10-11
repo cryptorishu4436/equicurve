@@ -1,4 +1,5 @@
 import type { PoolSnapshot } from "@/lib/dbc/types";
+import { stockQuoteForMint, type QuoteId } from "@/lib/quotes/catalog";
 import { isValidPublicKey } from "@/lib/validation";
 
 /** Lightweight registry equivalent of knownUsdcMints; parity is regression-tested.
@@ -13,9 +14,10 @@ export function registryUsdcMints(): string[] {
 }
 
 /** Only explicit supported mints are evidence of a quote denomination. */
-export function supportedQuoteLabel(mint: string | null, usdcMints: readonly string[]): "SOL" | "USDC" | null {
+export function supportedQuoteLabel(mint: string | null, usdcMints: readonly string[]): QuoteId | null {
   if (mint === "So11111111111111111111111111111111111111112") return "SOL";
   if (mint && usdcMints.includes(mint)) return "USDC";
+  if (mint) return stockQuoteForMint(mint)?.id ?? null;
   return null;
 }
 
@@ -24,7 +26,7 @@ export function quoteVerificationError(snapshot: PoolSnapshot, usdcMints: readon
     return { ok: false as const, status: 503, code: "config_unavailable", error: "Pool configuration or quote mint could not be verified. Retry shortly." };
   }
   if (!supportedQuoteLabel(snapshot.quoteMint, usdcMints)) {
-    return { ok: false as const, status: 400, code: "unsupported_quote", error: "Unsupported quote mint. EquiCurve supports only WSOL and known USDC mints." };
+    return { ok: false as const, status: 400, code: "unsupported_quote", error: "Unsupported quote mint. EquiCurve supports WSOL, known USDC, and the pinned stock-quote catalog." };
   }
   return null;
 }

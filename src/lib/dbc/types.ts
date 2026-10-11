@@ -1,9 +1,10 @@
+import type { QuoteId } from "@/lib/quotes/catalog";
 import type { CurveState } from "./curveState";
 import type { DbcPoolKind } from "./poolAccount";
 
 export type PresetId = "flat" | "exponential" | "long" | "equity" | "short";
 
-export type QuoteLabel = "SOL" | "USDC";
+export type QuoteLabel = QuoteId;
 
 export type { TransferProfile } from "./transferHook";
 

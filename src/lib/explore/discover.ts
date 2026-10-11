@@ -1,5 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import { WSOL_MINT, getCluster, getOptionalPoolConfigKey, knownUsdcMints } from "@/lib/constants";
+import { mintHintForQuote } from "@/lib/quotes/resolve";
 import { getServerConnection } from "@/lib/connection";
 import { getDbcClient } from "@/lib/dbc/client";
 import { compareDeploymentReadback } from "@/lib/dbc/deploymentReadback";
@@ -176,7 +177,7 @@ async function discoverBySharedConfig(
 function quoteMintFor(quote: string): string | null {
   if (quote === "SOL") return WSOL_MINT.toBase58();
   if (quote === "USDC") return knownUsdcMints()[0] ?? null;
-  return null;
+  return mintHintForQuote(quote);
 }
 
 /** The Explore chip follows the same live comparison as the market page. */

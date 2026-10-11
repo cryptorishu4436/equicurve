@@ -8,11 +8,11 @@ import {
 import BN from "bn.js";
 import {
   getOptionalPoolConfigKey,
-  getUsdcMint,
   isPlaceholderMetadataUri,
-  WSOL_MINT,
   type QuoteLabel,
 } from "@/lib/constants";
+import { assertQuoteDeployable } from "@/lib/quotes/resolve";
+import { resolvePartnerFeeClaimer } from "@/lib/presets/published";
 import { assertUsdcOverrideMint } from "./usdcOverride";
 import { AmountError, formatAtomsExact, parseUiAmountToBN } from "@/lib/amounts";
 import { EquiCurveError } from "@/lib/errors";
@@ -32,8 +32,8 @@ import {
   buildPresetConfig,
   getPreset,
   launchPresetOverrides,
+  marketCapsForQuote,
   MIN_LP_LOCK_PCT,
-  presetMarketCaps,
   validateEquiCurveConfig,
 } from "./presets";
 import type { LaunchFormInput, PreparedLaunch } from "./types";
@@ -85,7 +85,7 @@ export function launchCurveConfig(args: {
   lpLockPct: number;
   mintRenounce: boolean;
   antiSniper: boolean;
-  quoteDecimals: 6 | 9;
+  quoteDecimals: 6 | 7 | 8 | 9;
   transferProfile: TransferProfile;
   marketCaps?: LaunchFormInput["marketCaps"];
 }) {
@@ -210,25 +210,24 @@ export async function prepareLaunchTransaction(args: {
   // Mint+update authority is only valid on transfer-hook configs (Meteora docs).
   const effectiveMintRenounce = wantsTransferHook ? mintRenounce : true;
 
-  const quoteLabel: QuoteLabel = input.quoteLabel === "USDC" ? "USDC" : "SOL";
-  let quoteMint = WSOL_MINT;
-  let quoteDecimals = 9;
-  if (quoteLabel === "USDC") {
-    const usdc = getUsdcMint();
-    if (!usdc) {
-      throw new EquiCurveError(
-        "USDC quote is not available on this cluster (no known mint).",
-        "VALIDATION",
-      );
-    }
-    await assertUsdcOverrideMint(connection);
-    quoteMint = usdc;
-    quoteDecimals = 6;
+  const quoteLabel: QuoteLabel = input.quoteLabel ?? "SOL";
+  let resolved: ReturnType<typeof assertQuoteDeployable>;
+  try {
+    resolved = assertQuoteDeployable(quoteLabel);
+  } catch (error) {
+    throw new EquiCurveError(error instanceof Error ? error.message : "Quote is not deployable.", "VALIDATION");
   }
+  if (!resolved.mint) {
+    throw new EquiCurveError(resolved.unavailableReason ?? "Quote mint is unavailable.", "VALIDATION");
+  }
+  if (quoteLabel === "USDC") await assertUsdcOverrideMint(connection);
+  const quoteMint = new PublicKey(resolved.mint);
+  const quoteDecimals = resolved.decimals;
 
   let feeClaimer = payer;
-  if (input.feeClaimer?.trim()) {
-    const r = walletSchema.safeParse(input.feeClaimer.trim());
+  const claimerInput = resolvePartnerFeeClaimer(input.presetId, input.feeClaimer ?? "");
+  if (claimerInput) {
+    const r = walletSchema.safeParse(claimerInput);
     if (!r.success) {
       throw new EquiCurveError(
         "Partner fee claimer must be a valid on-curve wallet address (it has to sign claims).",
@@ -266,7 +265,7 @@ export async function prepareLaunchTransaction(args: {
     } satisfies LaunchKeypairs);
 
   const preset = getPreset(input.presetId);
-  const caps = input.marketCaps ?? presetMarketCaps(input.presetId, quoteLabel);
+  const caps = marketCapsForQuote(input.presetId, quoteLabel, input.marketCaps);
   let thresholdAtoms = "";
   let mode: PreparedLaunch["mode"];
   let configPubkey: PublicKey;
@@ -357,7 +356,7 @@ export async function prepareLaunchTransaction(args: {
       lpLockPct,
       mintRenounce: effectiveMintRenounce,
       antiSniper,
-      quoteDecimals: quoteDecimals as 6 | 9,
+      quoteDecimals,
       transferProfile,
       marketCaps: input.marketCaps,
     });
@@ -559,17 +558,16 @@ export function planLaunchAddresses(args: {
   quoteLabel: QuoteLabel;
   keypairs: LaunchKeypairs;
 }): { pool: string; mint: string; config: string; quoteMint: string } {
-  let quoteMint = WSOL_MINT;
-  if (args.quoteLabel === "USDC") {
-    const usdc = getUsdcMint();
-    if (!usdc) {
-      throw new EquiCurveError(
-        "USDC quote is not available on this cluster (no known mint).",
-        "VALIDATION",
-      );
-    }
-    quoteMint = usdc;
+  let resolved: ReturnType<typeof assertQuoteDeployable>;
+  try {
+    resolved = assertQuoteDeployable(args.quoteLabel);
+  } catch (error) {
+    throw new EquiCurveError(error instanceof Error ? error.message : "Quote is not deployable.", "VALIDATION");
   }
+  if (!resolved.mint) {
+    throw new EquiCurveError(resolved.unavailableReason ?? "Quote mint is unavailable.", "VALIDATION");
+  }
+  const quoteMint = new PublicKey(resolved.mint);
   const config = getOptionalPoolConfigKey() ?? args.keypairs.config.publicKey;
   const pool = deriveDbcPoolAddress(quoteMint, args.keypairs.baseMint.publicKey, config);
   return {

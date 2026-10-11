@@ -95,7 +95,7 @@ export class EquiCurveClient {
     const versions = assertResponseVersion(validateDesign(response));
     const result = record(response.result, "Design result");
     const preferred = record(result.preferred, "Design preferred candidate");
-    const brief = record(result.brief, "Design brief") as { asset: string; quote: "SOL" | "USDC"; targetRaise: string; typicalTrade: string; participants: number; objective: string; totalSupply?: number; creatorPct?: number; lpLockPct?: number; antiSniper?: boolean; stressPaths?: number; seed?: number };
+    const brief = record(result.brief, "Design brief") as { asset: string; quote: string; targetRaise: string; typicalTrade: string; participants: number; objective: string; totalSupply?: number; creatorPct?: number; lpLockPct?: number; antiSniper?: boolean; stressPaths?: number; seed?: number };
     assertFingerprint(preferred.fingerprint, "Design fingerprint");
     const designRequest: DesignRequest = {
       schemaVersion: "1", quote: brief.quote, raiseTarget: brief.targetRaise, typicalTrade: brief.typicalTrade, participants: brief.participants, objective: brief.objective,

@@ -12,6 +12,7 @@ import {
   type ExpectedMarketConfig,
 } from "@/lib/dbc/deploymentReadback";
 import type { QuoteLabel } from "@/lib/dbc/types";
+import { attestGraduation, canonicalGraduationPlan } from "@/lib/graduation/plan";
 import { budgetOnlyLoosens, constraintPolicyFrom, sameConstraintChanges } from "@/lib/market/constraintBudget";
 import type { ConstraintPolicy } from "@/lib/market/types";
 import type { PublicDeployment } from "./publicDeployments";
@@ -128,6 +129,17 @@ function designSchema(fingerprint: z.ZodString) {
        * Omitted on older designs and on an unresolved search.
        */
       constraintPolicy: constraintPolicySchema.optional(),
+      graduation: z
+        .object({
+          venue: z.enum(["damm-v2", "dlmm"]),
+          binStep: z.number().int().optional(),
+          feeBps: z.number().int().optional(),
+          rangeBins: z.number().int().optional(),
+          canonical: z.string().min(1).max(200),
+          fingerprint: z.string().regex(/^[0-9a-f]{32}$/),
+        })
+        .strict()
+        .optional(),
       transaction: z
         .string()
         .regex(/^[1-9A-HJ-NP-Za-km-z]{64,100}$/, "transaction must be a base58 signature")
@@ -150,7 +162,7 @@ function designSchema(fingerprint: z.ZodString) {
         });
       }
       const policy = design.constraintPolicy;
-      if (!policy) return;
+      if (policy) {
       if (!budgetOnlyLoosens(policy.requested, policy.applied)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -170,6 +182,41 @@ function designSchema(fingerprint: z.ZodString) {
           code: z.ZodIssueCode.custom,
           path: ["constraintsPassed"],
           message: "a relaxed budget cannot be marked as meeting the original constraints",
+        });
+      }
+      }
+      const graduation = design.graduation;
+      if (!graduation) return;
+      try {
+        const attested = attestGraduation(
+          graduation.venue === "damm-v2"
+            ? { venue: "damm-v2" }
+            : {
+                venue: "dlmm",
+                binStep: graduation.binStep ?? 0,
+                feeBps: graduation.feeBps ?? 0,
+                rangeBins: graduation.rangeBins ?? 0,
+              },
+        );
+        if (attested.canonical !== graduation.canonical || attested.fingerprint !== graduation.fingerprint) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["graduation", "fingerprint"],
+            message: "graduation fingerprint does not match the plan",
+          });
+        }
+        if (canonicalGraduationPlan(attested.plan) !== graduation.canonical) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["graduation", "canonical"],
+            message: "graduation canonical text does not match the plan",
+          });
+        }
+      } catch (error) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["graduation"],
+          message: error instanceof Error ? error.message : "invalid graduation plan",
         });
       }
     });

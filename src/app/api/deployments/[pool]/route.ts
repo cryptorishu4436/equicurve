@@ -5,6 +5,7 @@ import { getDbcClient } from "@/lib/dbc/client";
 import { fetchPoolSnapshot } from "@/lib/dbc/migrate";
 import { getServerConnection } from "@/lib/connection";
 import { WSOL_MINT, knownUsdcMints } from "@/lib/constants";
+import { mintHintForQuote } from "@/lib/quotes/resolve";
 import { resolveDeploymentRecord } from "@/lib/registry/design";
 import { getRecordedDeployment } from "@/lib/registry/publicDeployments";
 import { getRegistryLaunch } from "@/lib/registry/store";
@@ -26,7 +27,7 @@ const deploymentCache = createTtlSingleFlight<DeploymentPayload>(DEPLOYMENT_CACH
 function quoteMintFor(quote: string): string | null {
   if (quote === "SOL") return WSOL_MINT.toBase58();
   if (quote === "USDC") return knownUsdcMints()[0] ?? null;
-  return null;
+  return mintHintForQuote(quote);
 }
 
 function cacheable(payload: DeploymentPayload): boolean {

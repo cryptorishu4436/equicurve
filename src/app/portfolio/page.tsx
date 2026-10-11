@@ -7,7 +7,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { formatAtomsExact } from "@/lib/amounts";
-import { explorerAddressUrl, explorerTxUrl, getClusterLabel, getUsdcMint, WSOL_MINT } from "@/lib/constants";
+import { explorerAddressUrl, explorerTxUrl, getClusterLabel } from "@/lib/constants";
+import { resolveActiveQuote } from "@/lib/quotes/resolve";
 import {
   listActivity,
   listLaunches,
@@ -126,8 +127,9 @@ export default function PortfolioPage() {
     const failures: string[] = [];
     for (const launch of launches.filter((item) => item.dammPool)) {
       try {
-        const quoteMint = launch.quote === "USDC" ? getUsdcMint() : WSOL_MINT;
-        if (!quoteMint || !launch.dammPool) throw new Error("Quote mint unavailable on this cluster.");
+        const resolved = resolveActiveQuote(launch.quote);
+        const quoteMint = resolved.mint ? new PublicKey(resolved.mint) : null;
+        if (!quoteMint || !launch.dammPool) throw new Error(resolved.unavailableReason ?? "Quote mint unavailable on this cluster.");
         const pool = new PublicKey(launch.dammPool);
         const lpRead = await withReadConnection(connection, async (readConnection) => {
           const verified = await fetchDammPoolSnapshot({

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { EquiCurveError } from "@/lib/errors";
+import { isQuoteId } from "@/lib/quotes/catalog";
 import { designFromApiRequest, designRequestSchema } from "@/lib/market/designApi";
 import { clientKey, readJsonBody } from "@/lib/server/http";
 import { limitRequest } from "@/lib/server/rateLimit";
@@ -24,8 +25,8 @@ export async function POST(req: Request) {
   const parsed = designRequestSchema.safeParse(body.value);
   if (!parsed.success) {
     const rawQuote = body.value && typeof body.value === "object" ? (body.value as { quote?: unknown }).quote : undefined;
-    const unsupportedQuote = typeof rawQuote === "string" && rawQuote !== "SOL" && rawQuote !== "USDC";
-    return errorResponse(unsupportedQuote ? 422 : 400, unsupportedQuote ? "UNSUPPORTED_QUOTE" : "INVALID_REQUEST", unsupportedQuote ? "EquiCurve supports only SOL and USDC quotes." : "Request does not match the design API schema.", parsed.error.issues.map((issue) => ({ path: issue.path, message: issue.message })));
+    const unsupportedQuote = typeof rawQuote === "string" && !isQuoteId(rawQuote);
+    return errorResponse(unsupportedQuote ? 422 : 400, unsupportedQuote ? "UNSUPPORTED_QUOTE" : "INVALID_REQUEST", unsupportedQuote ? "Quote is not in the EquiCurve catalog." : "Request does not match the design API schema.", parsed.error.issues.map((issue) => ({ path: issue.path, message: issue.message })));
   }
   try {
     return NextResponse.json(designFromApiRequest(parsed.data));

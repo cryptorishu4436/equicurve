@@ -10,6 +10,8 @@ import {
 } from "@/lib/dbc/presets";
 import type { PresetId } from "@/lib/dbc/types";
 import { EquiCurveError } from "@/lib/errors";
+import { parseGraduationPlan } from "@/lib/graduation/plan";
+import { isQuoteId, quoteDecimals as decimalsOfQuote } from "@/lib/quotes/catalog";
 import { LIMITS } from "@/lib/validation";
 import { openBook } from "./book";
 import { runCohortStress } from "./cohorts";
@@ -64,8 +66,8 @@ const OBJECTIVES = new Set<LaunchBrief["objective"]>([
 const OBSERVED_NOTE =
   "No live launches are attached. Every score on this policy comes from the simulator.";
 
-function quoteDecimals(quote: LaunchBrief["quote"]): 6 | 9 {
-  return quote === "USDC" ? 6 : 9;
+function quoteDecimals(quote: LaunchBrief["quote"]) {
+  return decimalsOfQuote(quote);
 }
 
 function roundCap(n: number): number {
@@ -87,7 +89,7 @@ type ParsedBrief = {
   brief: LaunchBrief;
   targetAtoms: bigint;
   typicalAtoms: bigint;
-  decimals: 6 | 9;
+  decimals: 6 | 7 | 8 | 9;
   supply: number;
   paths: number;
   seed: number;
@@ -99,8 +101,16 @@ type ParsedBrief = {
 export function parseBrief(input: LaunchBrief): ParsedBrief {
   if (!ASSETS.has(input.asset)) throw new EquiCurveError("Unknown asset kind.", "VALIDATION");
   if (!OBJECTIVES.has(input.objective)) throw new EquiCurveError("Unknown market objective.", "VALIDATION");
-  if (input.quote !== "SOL" && input.quote !== "USDC") {
-    throw new EquiCurveError("Quote must be SOL or USDC.", "VALIDATION");
+  if (!isQuoteId(input.quote)) {
+    throw new EquiCurveError("Unknown quote asset.", "VALIDATION");
+  }
+  let graduation: LaunchBrief["graduation"];
+  if (input.graduation) {
+    try {
+      graduation = parseGraduationPlan(input.graduation);
+    } catch (error) {
+      throw new EquiCurveError(error instanceof Error ? error.message : "Invalid graduation plan.", "VALIDATION");
+    }
   }
   if (!Number.isInteger(input.participants) || input.participants < 1 || input.participants > 1_000_000) {
     throw new EquiCurveError("Participants must be a whole number from 1 to 1,000,000.", "VALIDATION");
@@ -151,6 +161,7 @@ export function parseBrief(input: LaunchBrief): ParsedBrief {
       lpLockPct,
       antiSniper: input.antiSniper ?? true,
       seed,
+      ...(graduation ? { graduation } : {}),
     },
     targetAtoms,
     typicalAtoms,
@@ -170,7 +181,7 @@ function thresholdOf(cfg: ConfigParameters): bigint {
 
 function buildAt(args: {
   presetId: PresetId;
-  decimals: 6 | 9;
+  decimals: 6 | 7 | 8 | 9;
   supply: number;
   initial: number;
   migration: number;
@@ -200,7 +211,7 @@ function buildAt(args: {
 function searchCaps(args: {
   presetId: PresetId;
   multiple: number;
-  decimals: 6 | 9;
+  decimals: 6 | 7 | 8 | 9;
   supply: number;
   targetAtoms: bigint;
   targetUi: number;
@@ -652,6 +663,9 @@ export function designPolicy(
   );
   if (chosen.dynamicFeeStatus === "simulated") {
     limits.push("The dynamic fee is replayed inside the simulator. It is a model of the program, not a quote from a live pool.");
+  }
+  if (parsed.brief.graduation?.venue === "dlmm") {
+    limits.push("The DLMM plan is a separate pool opened after DAMM v2 migration. It does not change the curve fingerprint.");
   }
   const configHash = recipeConfigHash(chosen.recipe);
   const why = whyLines(parsed, chosen, alternatives[0], priorities, search);

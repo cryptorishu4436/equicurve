@@ -15,17 +15,18 @@ import {
   FEE_BY_PRESET,
   getPreset,
   launchPresetOverrides,
+  marketCapsForQuote,
   POOL_CREATION_FEE_SOL,
-  presetMarketCaps,
   presetPriceMultiple,
   tradingFeeSplit,
 } from "./presets";
 import { marketConfigFingerprint } from "./configFingerprint";
-import type { PresetId } from "./types";
+import type { PresetId, QuoteLabel } from "./types";
+import { quoteDecimals as decimalsOfQuote } from "@/lib/quotes/catalog";
 
 export type LaunchReviewInput = {
   presetId: PresetId;
-  quote: "SOL" | "USDC";
+  quote: QuoteLabel;
   /** Quote mint address for the active cluster (null = unavailable). */
   quoteMint: string | null;
   transferProfile: "open-spl" | "token-2022" | "transfer-hook";
@@ -80,7 +81,7 @@ export function sqrtPriceToPriceString(sqrtPrice: bigint, baseDecimals: number, 
 export function buildLaunchReview(i: LaunchReviewInput): LaunchReview {
   const errors: string[] = [];
   const rows: ReviewRow[] = [];
-  const quoteDecimals = i.quote === "USDC" ? 6 : 9;
+  const quoteDecimals = decimalsOfQuote(i.quote);
   const baseDecimals = 9;
   const preset = getPreset(i.presetId);
   const fee = FEE_BY_PRESET[i.presetId];
@@ -108,7 +109,7 @@ export function buildLaunchReview(i: LaunchReviewInput): LaunchReview {
     tokenAuthorityOption: number;
   };
   const threshold = cfg.migrationQuoteThreshold.toString();
-  const caps = i.marketCaps ?? presetMarketCaps(i.presetId, i.quote);
+  const caps = marketCapsForQuote(i.presetId, i.quote, i.marketCaps);
   const shared = !!i.sharedConfig;
   if (shared && i.marketCaps) {
     errors.push(
@@ -152,7 +153,7 @@ export function buildLaunchReview(i: LaunchReviewInput): LaunchReview {
       value: `${preset.name} · ${
         i.marketCaps
           ? `${Math.round((caps.migration / caps.initial) * 100) / 100}×`
-          : `${presetPriceMultiple(i.presetId, i.quote)}×`
+          : `${presetPriceMultiple(i.presetId, i.quote === "USDC" ? "USDC" : i.quote === "SOL" ? "SOL" : "STOCK")}×`
       } price range · market cap ${caps.initial.toLocaleString()} → ${caps.migration.toLocaleString()} ${i.quote}`,
       note: i.marketCaps
         ? "These market caps are the selected design. They are quote-token units, not USD, and they are what the create transaction builds."

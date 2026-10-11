@@ -222,7 +222,7 @@ export function TradePanel({
   const progressPct =
     snapshot?.quoteProgress == null ? null : snapshot.quoteProgress * 100;
   const quoteSymbol = snapshot?.quoteMint
-    ? quoteLabelForMint(snapshot.quoteMint)
+    ? quoteLabelForMint(snapshot.quoteMint) ?? "quote"
     : "quote";
   const curvePhase = snapshot?.curve.phase ?? "unknown";
   const amountError = tradeAmountError(

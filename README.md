@@ -105,7 +105,7 @@ The same explainer is on Home, `/trust` and `/docs` (`src/lib/positioning.ts` is
 | **Trade on curve** (`/o/[id]`, `/trade/[pool]`) | Real DBC quote + swap. Pre-sign summary: exact input, estimated and minimum output, fee, slippage; re-quoted if older than 15s or the pool changed. Buys larger than the remaining curve become a partial fill. | — |
 | **Graduation** | Threshold, raised, remaining (exact, quote units) read from chain; `migrateToDammV2`; DAMM v2 pool shown as *verified* only after its account is fetched. | Before verification the DAMM pool address is labelled *expected (derived)*. |
 | **DAMM v2 ticket** | Real cp-amm quote + swap + position-fee claim, same pre-sign summary. | Add/remove liquidity not built. |
-| **Explore** | Registry rows carry `verified: true` only after a creator signature and a readable on-chain configuration with an explicit WSOL or known USDC quote. | Browser-local launches and the **Show examples / `?demo=1`** cards (badged *Illustrative · not live*, trade disabled). |
+| **Explore** | Registry rows carry `verified: true` only after a creator signature and a readable on-chain configuration whose quote is WSOL, known USDC, or a pinned stock mint. | Browser-local launches and the **Show examples / `?demo=1`** cards (badged *Illustrative · not live*, trade disabled). |
 | **Price chart** | Swap-derived points from confirmed txs; live spot from pool `sqrtPrice`. | The theoretical curve line (x-axis = raise progress, not time). |
 | **Portfolio** | Wallet token balances read from chain (SPL + Token-2022), exact atoms. | Launches and activity recorded in this browser (labelled local). |
 | **Issuer attestation / docs checklist** | — | Self-reported, stored in the browser, not reviewed, **not KYC**. |
@@ -138,7 +138,7 @@ The same explainer is on Home, `/trust` and `/docs` (`src/lib/positioning.ts` is
 | `/o/[id]` | Offering detail + **in-app DAMM v2 post-grad ticket** (quote/swap2 + position fee claim) when graduated |
 | `/o/[id]` (more) | Graduation card (exact remaining), labelled price chart, holders, trade with pre-sign summary, creator metadata editor |
 | `/o/[id]/graduate`, `/graduate/[pool]` | Real `migrateToDammV2` |
-| `/trade/[pool]` | Quote & swap on curve (SOL or USDC) |
+| `/trade/[pool]` | Quote & swap on curve (SOL, USDC, or a pinned stock quote) |
 | `/portfolio` | Verified on-chain wallet positions, separate from locally recorded launches / activity |
 | `/issuer` | Fee claim over real claim SDK paths |
 | `/trust` | Program IDs + copy aligned to what Create actually sets |

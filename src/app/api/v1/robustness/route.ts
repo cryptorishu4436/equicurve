@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { DeveloperApiError, robustnessFromReference, selectedDesignReferenceSchema } from "@/lib/market/designApi";
+import { isQuoteId } from "@/lib/quotes/catalog";
 import { clientKey, readJsonBody } from "@/lib/server/http";
 import { limitRequest } from "@/lib/server/rateLimit";
 
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
   const rawQuote = body.value && typeof body.value === "object" && "designRequest" in body.value && body.value.designRequest && typeof body.value.designRequest === "object"
     ? (body.value.designRequest as { quote?: unknown }).quote
     : undefined;
-  if (typeof rawQuote === "string" && rawQuote !== "SOL" && rawQuote !== "USDC") return errorResponse(422, "UNSUPPORTED_QUOTE", "EquiCurve supports only SOL and USDC quotes.");
+  if (typeof rawQuote === "string" && !isQuoteId(rawQuote)) return errorResponse(422, "UNSUPPORTED_QUOTE", "Quote is not in the EquiCurve catalog.");
   const parsed = selectedDesignReferenceSchema.safeParse(body.value);
   if (!parsed.success) return errorResponse(400, "INVALID_REQUEST", "Request does not match the selected-design reference schema.", parsed.error.issues.map((issue) => ({ path: issue.path, message: issue.message })));
   try {

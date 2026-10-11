@@ -29,10 +29,11 @@ import {
 import { transactionNotice } from "@/lib/transactionUi";
 import { signAndSendTransaction } from "@/lib/send";
 import { formatQuoteAtoms } from "@/lib/amounts";
+import type { QuoteLabel } from "@/lib/dbc/types";
 import { formatPermanentLock } from "@/lib/marketDisplay";
 
 /** Exact atoms → display (string math; no float precision loss). */
-function formatQuoteAmount(raw: string, quote: "SOL" | "USDC" = "SOL"): string {
+function formatQuoteAmount(raw: string, quote: QuoteLabel = "SOL"): string {
   try {
     return formatQuoteAtoms(raw, quote);
   } catch {
@@ -105,8 +106,7 @@ export function IssuerDashboard() {
   }, [refreshFees]);
 
   const current = launches.find((l) => l.pool === selected);
-  const quoteLabel: "SOL" | "USDC" =
-    current?.quote === "USDC" ? "USDC" : "SOL";
+  const quoteLabel: QuoteLabel = current?.quote ?? "SOL";
 
   const walletPk = wallet.publicKey?.toBase58() ?? null;
   const isCreator = !!(walletPk && roles && roles.creator === walletPk);

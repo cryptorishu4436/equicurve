@@ -1,4 +1,5 @@
 import type { PresetId, QuoteLabel } from "@/lib/dbc/types";
+import type { GraduationPlan } from "@/lib/graduation/plan";
 
 /** What the issuer says the token is. This does not create legal rights. */
 export type AssetKind =
@@ -44,6 +45,11 @@ export type LaunchBrief = {
   stressPaths?: number;
   /** Deterministic stress seed. Default 0xec0c. */
   seed?: number;
+  /**
+   * Post-curve venue. Omitted means DAMM v2, which is what the program migrates to.
+   * A DLMM plan does not change the curve fingerprint.
+   */
+  graduation?: GraduationPlan;
 };
 
 export type ScenarioId = "retail" | "whale" | "late" | "sell-pressure" | "volatile";

@@ -1,4 +1,4 @@
-import type { PresetId } from "@/lib/dbc/types";
+import type { PresetId, QuoteLabel } from "@/lib/dbc/types";
 
 export type Sector =
   | "Equity"
@@ -15,7 +15,7 @@ export type DemoOffering = {
   ticker: string;
   sector: Sector;
   thesis: string;
-  quote: "SOL" | "USDC";
+  quote: QuoteLabel;
   raiseTarget: number;
   raised: number;
   presetId: PresetId;

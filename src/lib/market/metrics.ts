@@ -9,11 +9,12 @@ import {
 import type { PoolSnapshot } from "@/lib/dbc/types";
 import { formatAtomsExact } from "@/lib/amounts";
 import { isUsdcMint, WSOL_MINT } from "@/lib/constants";
+import { stockQuoteForMint, type QuoteId } from "@/lib/quotes/catalog";
 import { withReadConnection } from "@/lib/connection";
 import type { CurvePhase } from "@/lib/dbc/curveState";
 
 export type ActiveVenue = "dbc" | "damm-v2" | "pending" | "unknown";
-export type MetricQuote = "SOL" | "USDC";
+export type MetricQuote = QuoteId;
 
 export type SolUsdReference = {
   usdPerSol: string;
@@ -175,7 +176,8 @@ export function resolveActiveVenue(
 function quoteForMint(mint: string | null): MetricQuote | null {
   if (!mint) return null;
   if (mint === WSOL_MINT.toBase58()) return "SOL";
-  return isUsdcMint(mint) ? "USDC" : null;
+  if (isUsdcMint(mint)) return "USDC";
+  return stockQuoteForMint(mint)?.id ?? null;
 }
 
 function emptyMetrics(snapshot: PoolSnapshot): MarketMetrics {
@@ -250,7 +252,8 @@ export async function buildMarketMetrics(connection: Connection, pool: PublicKey
   const snapshot = await withReadConnection(connection, (read) => fetchPoolSnapshot(read, pool), { server: true });
   const metrics = emptyMetrics(snapshot);
   const quote = quoteForMint(snapshot.quoteMint);
-  if (!quote) addReason(metrics, "Quote mint is not a verified EquiCurve SOL or USDC quote.");
+  if (!quote) addReason(metrics, "Quote mint is not in the EquiCurve catalog.");
+  else if (quote !== "SOL" && quote !== "USDC") addReason(metrics, "Stock quote valuation stays in quote tokens. It is not converted to USD.");
 
   let supply: Awaited<ReturnType<typeof readSupplyAndHolders>> | null = null;
   try {

@@ -4,11 +4,12 @@
  */
 import { PublicKey } from "@solana/web3.js";
 import { z } from "zod";
+import { QUOTE_ID_LIST, quoteDecimals, type QuoteId } from "@/lib/quotes/catalog";
 import { AmountError, parseUiAmount } from "./amounts";
 
 export const SECTORS = ["Equity", "RWA", "Fund", "Private Co", "Other"] as const;
 export const PRESET_IDS = ["flat", "exponential", "long", "equity", "short"] as const;
-export const QUOTES = ["SOL", "USDC"] as const;
+export const QUOTES = QUOTE_ID_LIST;
 export const CLUSTERS = ["devnet", "mainnet-beta", "testnet"] as const;
 
 export const LIMITS = {
@@ -259,7 +260,7 @@ export type WizardValidationInput = {
   /** Token image URL (optional, https). */
   image?: string;
   raiseTarget: number;
-  quote: "SOL" | "USDC";
+  quote: QuoteId;
   seedBuy: string;
   presetId: string;
   feeIssuer: number;
@@ -276,12 +277,13 @@ function check<T>(schema: z.ZodType<T>, value: unknown): string | undefined {
 }
 
 /** Validate seed-buy amount string for the chosen quote (exact decimals). */
-export function validateSeedBuy(value: string, quote: "SOL" | "USDC"): string | undefined {
+export function validateSeedBuy(value: string, quote: QuoteId): string | undefined {
   const s = (value ?? "").trim();
   if (s === "" || /^0*(\.0*)?$/.test(s)) return undefined; // 0 / blank = no seed buy
+  const decimals = quoteDecimals(quote);
   try {
-    parseUiAmount(s, quote === "USDC" ? 6 : 9, {
-      max: LIMITS.seedBuyMaxWhole * 10n ** BigInt(quote === "USDC" ? 6 : 9),
+    parseUiAmount(s, decimals, {
+      max: LIMITS.seedBuyMaxWhole * 10n ** BigInt(decimals),
     });
     return undefined;
   } catch (e) {

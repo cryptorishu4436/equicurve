@@ -1,4 +1,6 @@
-import type { PresetId } from "@/lib/dbc/types";
+import type { PresetId, QuoteLabel } from "@/lib/dbc/types";
+import { attestGraduation, type DlmmBinStep, type GraduationPlan } from "@/lib/graduation/plan";
+import { quoteDecimals } from "@/lib/quotes/catalog";
 import type { Sector } from "@/lib/demo/offerings";
 import { MIN_LP_LOCK_PCT } from "@/lib/dbc/presets";
 import { parseUiAmount } from "@/lib/amounts";
@@ -53,8 +55,12 @@ export type WizardState = {
   website: string;
   xProfile: string;
   raiseTarget: number;
-  /** Quote mint wired on-chain when known for cluster (SOL default). */
-  quote: "SOL" | "USDC";
+  /** Quote mint wired on-chain when known for the active cluster. */
+  quote: QuoteLabel;
+  graduationVenue: "damm-v2" | "dlmm";
+  dlmmBinStep: DlmmBinStep;
+  dlmmFeeBps: number;
+  dlmmRangeBins: number;
   /** Exact decimal string in quote units (converted to atoms without floats). */
   seedBuy: string;
   jurisdictions: string;
@@ -108,6 +114,31 @@ export type WizardState = {
   totalSupply: number;
 };
 
+export function wizardGraduation(state: Pick<WizardState, "graduationVenue" | "dlmmBinStep" | "dlmmFeeBps" | "dlmmRangeBins">): GraduationPlan {
+  if (state.graduationVenue !== "dlmm") return { venue: "damm-v2" };
+  return {
+    venue: "dlmm",
+    binStep: state.dlmmBinStep,
+    feeBps: state.dlmmFeeBps,
+    rangeBins: state.dlmmRangeBins,
+  };
+}
+
+export function storedGraduation(state: Parameters<typeof wizardGraduation>[0]) {
+  const attested = attestGraduation(wizardGraduation(state));
+  if (attested.plan.venue === "damm-v2") {
+    return { venue: "damm-v2" as const, canonical: attested.canonical, fingerprint: attested.fingerprint };
+  }
+  return {
+    venue: "dlmm" as const,
+    binStep: attested.plan.binStep,
+    feeBps: attested.plan.feeBps,
+    rangeBins: attested.plan.rangeBins,
+    canonical: attested.canonical,
+    fingerprint: attested.fingerprint,
+  };
+}
+
 export const INITIAL_WIZARD: WizardState = {
   name: "",
   ticker: "",
@@ -117,6 +148,10 @@ export const INITIAL_WIZARD: WizardState = {
   xProfile: "",
   raiseTarget: 100,
   quote: "SOL",
+  graduationVenue: "damm-v2",
+  dlmmBinStep: 25,
+  dlmmFeeBps: 100,
+  dlmmRangeBins: 10,
   seedBuy: "0",
   jurisdictions: "",
   investorType: "Retail-friendly",
@@ -213,7 +248,7 @@ export function applyWizardPatch(s: WizardState, p: Partial<WizardState>): Wizar
 function briefReady(s: WizardState): boolean {
   if (!Number.isInteger(s.participants) || s.participants < 1 || s.participants > 1_000_000) return false;
   try {
-    const decimals = s.quote === "USDC" ? 6 : 9;
+    const decimals = quoteDecimals(s.quote);
     const target = parseUiAmount(s.targetRaise, decimals);
     const typical = parseUiAmount(s.typicalTrade, decimals);
     return target > 0n && typical > 0n && typical <= target * 1_000n;

@@ -13,10 +13,12 @@ import {
   TokenType,
   type ConfigParameters,
 } from "@meteora-ag/dynamic-bonding-curve-sdk";
+import type { QuoteDecimals } from "@/lib/quotes/catalog";
+import { getQuoteAsset, type QuoteId } from "@/lib/quotes/catalog";
 import type { PresetId } from "./types";
 
-/** Quote assets EquiCurve supports on DBC. Preset market caps are denominated in these. */
-export type PresetQuote = "SOL" | "USDC";
+/** Preset cap tables. STOCK means "1 quote token, times the USDC price multiple". */
+export type PresetQuote = "SOL" | "USDC" | "STOCK";
 
 /**
  * Start / graduation market caps in QUOTE-token units (not USD):
@@ -33,8 +35,8 @@ export type CurvePreset = {
   description: string;
   bestFor: string;
   feeLabel: string;
-  /** Market caps per quote asset, in that quote's units. */
-  marketCap: Record<PresetQuote, QuoteMarketCaps>;
+  /** Market caps per core quote, in that quote's units. Stock quotes use a separate unit table. */
+  marketCap: Record<"SOL" | "USDC", QuoteMarketCaps>;
   /** Why an equity-style issuer would pick this preset (in-product answer). */
   equityFit: string;
   /** Plain-language price path. */
@@ -153,14 +155,32 @@ export function getPreset(id: PresetId): CurvePreset {
   return found;
 }
 
-/** Quote asset for a quote-decimals value (EquiCurve supports SOL=9, USDC=6). */
+/** Quote asset for a quote-decimals value. 7 and 8 use the stock-unit table. */
 export function presetQuoteForDecimals(quoteDecimals: number | undefined): PresetQuote {
-  return quoteDecimals === 6 ? "USDC" : "SOL";
+  if (quoteDecimals === 6) return "USDC";
+  if (quoteDecimals === 7 || quoteDecimals === 8) return "STOCK";
+  return "SOL";
 }
 
 /** Market caps (in quote units) a preset uses for the given quote. */
 export function presetMarketCaps(id: PresetId, quote: PresetQuote): QuoteMarketCaps {
-  return getPreset(id).marketCap[quote];
+  const preset = getPreset(id);
+  if (quote === "STOCK") {
+    const multiple = preset.marketCap.USDC.migration / preset.marketCap.USDC.initial;
+    return { initial: 1, migration: multiple };
+  }
+  return preset.marketCap[quote];
+}
+
+/** Caps for a catalog quote. Searched caps win. Stock defaults are quote-token counts. */
+export function marketCapsForQuote(
+  id: PresetId,
+  quote: QuoteId,
+  override?: QuoteMarketCaps,
+): QuoteMarketCaps {
+  if (override) return override;
+  const kind = getQuoteAsset(quote).kind;
+  return presetMarketCaps(id, kind === "stock" ? "STOCK" : kind === "stable" ? "USDC" : "SOL");
 }
 
 /** Graduation price ÷ starting price (supply is constant, so = migration MC ÷ initial MC). */
@@ -258,7 +278,7 @@ export type BuildPresetOverrides = {
    * quote-denominated market caps the preset uses (SOL vs USDC caps),
    * unless `marketCaps` is set.
    */
-  quoteDecimals?: 6 | 9;
+  quoteDecimals?: QuoteDecimals;
   /**
    * Override the preset's start and graduation market caps (quote-token units).
    * The fee schedule still comes from the preset. Used by the market-design
@@ -285,7 +305,7 @@ export function launchPresetOverrides(args: {
   lpLockPct: number;
   mintRenounce: boolean;
   antiSniper: boolean;
-  quoteDecimals: 6 | 9;
+  quoteDecimals: QuoteDecimals;
   transferProfile: "open-spl" | "token-2022" | "transfer-hook";
   /** Searched caps from a launch policy. Omitted means the preset's own caps. */
   marketCaps?: QuoteMarketCaps;
@@ -303,6 +323,13 @@ export function launchPresetOverrides(args: {
     tokenType: args.transferProfile === "open-spl" ? "spl" : "token-2022",
     allowMintAuthority: wantsHook && !effectiveRenounce,
   };
+}
+
+function tokenQuoteDecimal(decimals: number | undefined) {
+  if (decimals === 6) return TokenDecimal.SIX;
+  if (decimals === 7) return TokenDecimal.SEVEN;
+  if (decimals === 8) return TokenDecimal.EIGHT;
+  return TokenDecimal.NINE;
 }
 
 /**
@@ -350,8 +377,7 @@ export function buildPresetConfig(
     token: {
       tokenType,
       tokenBaseDecimal: TokenDecimal.NINE,
-      tokenQuoteDecimal:
-        opts.quoteDecimals === 6 ? TokenDecimal.SIX : TokenDecimal.NINE,
+      tokenQuoteDecimal: tokenQuoteDecimal(opts.quoteDecimals),
       tokenAuthorityOption,
       totalTokenSupply: opts.totalTokenSupply ?? 1_000_000_000,
       leftover: opts.leftover ?? 0,
@@ -417,7 +443,11 @@ export function presetMigrationThresholdAtoms(id: PresetId, quote: PresetQuote):
   const key = `${id}:${quote}`;
   const hit = thresholdCache.get(key);
   if (hit) return hit;
-  const cfg = buildPresetConfig(id, { quoteDecimals: quote === "USDC" ? 6 : 9 }) as {
+  const quoteDecimals = quote === "USDC" ? 6 : quote === "STOCK" ? 8 : 9;
+  const cfg = buildPresetConfig(id, {
+    quoteDecimals,
+    marketCaps: presetMarketCaps(id, quote),
+  }) as {
     migrationQuoteThreshold: { toString(): string };
   };
   const v = cfg.migrationQuoteThreshold.toString();

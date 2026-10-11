@@ -5,11 +5,14 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { getClusterLabel, getCluster, getOptionalPoolConfigKey, isLocalRpc, WSOL_MINT } from "@/lib/constants";
+import { getClusterLabel, getCluster, getOptionalPoolConfigKey, isLocalRpc } from "@/lib/constants";
 import { launchCurveConfig, planLaunchAddresses, prepareLaunchTransaction } from "@/lib/dbc/create";
 import { signLaunchPayload, type LaunchAuthPayload, type SignedLaunchBody } from "@/lib/auth/launchAuth";
 import { signSchedulePayload, type ScheduleAuthPayload } from "@/lib/auth/scheduleAuth";
-import { getUsdcMint } from "@/lib/constants";
+import { QUOTE_ASSETS } from "@/lib/quotes/catalog";
+import { resolveActiveQuote } from "@/lib/quotes/resolve";
+import { attestGraduation, DLMM_BIN_STEPS } from "@/lib/graduation/plan";
+import { resolvePartnerFeeClaimer } from "@/lib/presets/published";
 import { resolveMetadataUri } from "@/lib/metadata/client";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { getPreset, MIN_LP_LOCK_PCT, tradingFeeSplit } from "@/lib/dbc/presets";
@@ -40,6 +43,8 @@ import { clsx } from "clsx";
 import { OfferingPreviewCard } from "./OfferingPreviewCard";
 import {
   applyWizardPatch,
+  storedGraduation,
+  wizardGraduation,
   canContinue,
   guardWizardStep,
   resolveWizardStep,
@@ -55,6 +60,14 @@ import {
   TRANSFER_PROFILE_LABELS,
   type TransferProfile,
 } from "@/lib/dbc/transferHook";
+
+function graduationNote(state: Parameters<typeof wizardGraduation>[0]): string {
+  try {
+    return attestGraduation(wizardGraduation(state)).note;
+  } catch (error) {
+    return error instanceof Error ? error.message : "Graduation plan is not valid yet.";
+  }
+}
 
 const ALL_PRESET_IDS: PresetId[] = [
   "short",
@@ -155,14 +168,14 @@ export function CreateWizard() {
     const built = buildLaunchReview({
       presetId: state.presetId,
       quote: state.quote,
-      quoteMint: state.quote === "USDC" ? (getUsdcMint()?.toBase58() ?? null) : WSOL_MINT.toBase58(),
+      quoteMint: resolveActiveQuote(state.quote).mint,
       transferProfile: state.transferProfile,
       totalSupply: state.totalSupply,
       creatorPct: state.feeIssuer,
       lpLockPct: state.lpLockPct,
       mintRenounce: state.mintRenounce,
       antiSniper: state.antiSniper,
-      feeClaimer: state.feeClaimer,
+      feeClaimer: resolvePartnerFeeClaimer(state.presetId, state.feeClaimer),
       wallet: walletAddr,
       seedBuy: state.seedBuy,
       cluster: getClusterLabel(),
@@ -262,7 +275,7 @@ export function CreateWizard() {
         lpLockPct: state.lpLockPct,
         mintRenounce: state.mintRenounce,
         antiSniper: state.antiSniper,
-        quoteDecimals: state.quote === "USDC" ? 6 : 9,
+        quoteDecimals: resolveActiveQuote(state.quote).decimals,
         transferProfile: state.transferProfile,
         marketCaps: state.marketCaps,
       });
@@ -288,7 +301,7 @@ export function CreateWizard() {
         lpLockPct: state.lpLockPct,
         antiSniper: state.antiSniper,
         mintRenounce: state.mintRenounce,
-        feeClaimer: state.feeClaimer.trim(),
+        feeClaimer: resolvePartnerFeeClaimer(state.presetId, state.feeClaimer),
         transferProfile: state.transferProfile,
         designFingerprint: state.designed.configFingerprint,
         design: {
@@ -299,6 +312,7 @@ export function CreateWizard() {
           profileName: (state.designed.profileName || state.presetId).slice(0, 80),
           constraintsPassed: state.designed.constraintsPassed === true,
           ...(state.designed.constraintPolicy ? { constraintPolicy: state.designed.constraintPolicy } : {}),
+          graduation: storedGraduation(state),
         },
         scheduledForUtc,
         marketCaps: state.marketCaps,
@@ -372,7 +386,7 @@ export function CreateWizard() {
           lpLockPct: state.lpLockPct,
           mintRenounce: state.mintRenounce,
           antiSniper: state.antiSniper,
-          quoteDecimals: state.quote === "USDC" ? 6 : 9,
+          quoteDecimals: resolveActiveQuote(state.quote).decimals,
           transferProfile: state.transferProfile,
           marketCaps: state.marketCaps,
         });
@@ -460,6 +474,7 @@ export function CreateWizard() {
           profileName: (state.designed.profileName || state.presetId).slice(0, 80),
           constraintsPassed: state.designed.constraintsPassed === true,
           ...(state.designed.constraintPolicy ? { constraintPolicy: state.designed.constraintPolicy } : {}),
+          graduation: storedGraduation(state),
         },
       };
 
@@ -524,7 +539,7 @@ export function CreateWizard() {
             seedBuyAmount: state.seedBuy,
             antiSniper: state.antiSniper,
             quoteLabel: state.quote,
-            feeClaimer: state.feeClaimer.trim() || undefined,
+            feeClaimer: resolvePartnerFeeClaimer(state.presetId, state.feeClaimer) || undefined,
             transferProfile: state.transferProfile,
             marketCaps: state.marketCaps ?? undefined,
           },
@@ -650,6 +665,7 @@ export function CreateWizard() {
         thesis: state.thesis,
         sector: state.sector,
         quote: prepared.quoteLabel,
+        graduation: attestGraduation(wizardGraduation(state)),
         raiseTarget: state.raiseTarget,
         website: website ?? undefined,
         xProfile: xProfile ?? undefined,
@@ -1079,34 +1095,85 @@ function StepGoals({
         <fieldset className="space-y-2">
           <legend className="ec-label">Quote asset</legend>
           <div className="flex flex-wrap gap-2">
-            {(["SOL", "USDC"] as const).map((q) => {
-              const usdcOk = !!getUsdcMint();
-              const disabled = q === "USDC" && !usdcOk;
+            {QUOTE_ASSETS.filter((asset) => asset.kind !== "stock").map((asset) => {
+              const resolved = resolveActiveQuote(asset.id);
               return (
                 <button
-                  key={q}
+                  key={asset.id}
                   type="button"
-                  disabled={disabled}
-                  onClick={() => patch({ quote: q })}
+                  disabled={!resolved.available}
+                  onClick={() => patch({ quote: asset.id })}
                   className={
-                    state.quote === q
+                    state.quote === asset.id
                       ? "rounded-pill border border-accent/50 bg-accent/15 px-3 py-1.5 text-sm text-accent"
                       : "rounded-pill border border-line bg-subtle px-3 py-1.5 text-sm text-fg-secondary disabled:opacity-40"
                   }
                 >
-                  {q === "SOL" ? "SOL (WSOL)" : "USDC"}
+                  {asset.symbol}
                 </button>
               );
             })}
           </div>
+          <label className="block space-y-1.5">
+            <span className="ec-label">Tokenized-stock quote</span>
+            <select
+              className="ec-input"
+              value={QUOTE_ASSETS.some((asset) => asset.kind === "stock" && asset.id === state.quote) ? state.quote : ""}
+              onChange={(e) => {
+                const id = e.target.value;
+                if (QUOTE_ASSETS.some((asset) => asset.id === id)) patch({ quote: id as typeof state.quote });
+              }}
+            >
+              <option value="">None — use SOL or USDC</option>
+              {QUOTE_ASSETS.filter((asset) => asset.kind === "stock").map((asset) => (
+                <option key={asset.id} value={asset.id} disabled={!resolveActiveQuote(asset.id).available}>
+                  {asset.symbol} · {asset.name} · {asset.issuer}
+                </option>
+              ))}
+            </select>
+          </label>
           <p className="text-xs text-fg-muted">
-            {state.quote === "USDC"
-              ? "USDC is the on-chain quote mint. The target raise is what the search tries to hit as migrationQuoteThreshold."
-              : "SOL (WSOL) is the on-chain quote. The target raise is what the search tries to hit as migrationQuoteThreshold."}
-            {!getUsdcMint() && (
-              <> USDC is unavailable on this cluster (no known mint).</>
-            )}
+            {resolveActiveQuote(state.quote).claim} The target raise is in {state.quote} units and is what the search tries to hit as migrationQuoteThreshold.
+            {resolveActiveQuote(state.quote).unavailableReason ? ` ${resolveActiveQuote(state.quote).unavailableReason}` : ""}
           </p>
+        </fieldset>
+        <fieldset className="space-y-2">
+          <legend className="ec-label">After graduation</legend>
+          <div className="flex flex-wrap gap-2">
+            {(["damm-v2", "dlmm"] as const).map((venue) => (
+              <button
+                key={venue}
+                type="button"
+                onClick={() => patch({ graduationVenue: venue })}
+                className={
+                  state.graduationVenue === venue
+                    ? "rounded-pill border border-accent/50 bg-accent/15 px-3 py-1.5 text-sm text-accent"
+                    : "rounded-pill border border-line bg-subtle px-3 py-1.5 text-sm text-fg-secondary"
+                }
+              >
+                {venue === "damm-v2" ? "DAMM v2 migration" : "Separate DLMM pool"}
+              </button>
+            ))}
+          </div>
+          {state.graduationVenue === "dlmm" ? (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="space-y-1">
+                <span className="ec-label">Bin step</span>
+                <select className="ec-input" value={state.dlmmBinStep} onChange={(e) => patch({ dlmmBinStep: Number(e.target.value) as typeof state.dlmmBinStep })}>
+                  {DLMM_BIN_STEPS.map((step) => <option key={step} value={step}>{step}</option>)}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="ec-label">Fee (bps)</span>
+                <input className="ec-input font-mono" type="number" min={1} value={state.dlmmFeeBps} onChange={(e) => patch({ dlmmFeeBps: Number(e.target.value) })} />
+              </label>
+              <label className="space-y-1">
+                <span className="ec-label">Bins each side</span>
+                <input className="ec-input font-mono" type="number" min={1} max={34} value={state.dlmmRangeBins} onChange={(e) => patch({ dlmmRangeBins: Number(e.target.value) })} />
+              </label>
+            </div>
+          ) : null}
+          <p className="text-xs text-fg-muted">{graduationNote(state)}</p>
         </fieldset>
 
         
@@ -1286,8 +1353,7 @@ function StepFees({
           </div>
         </div>
         <p className="text-xs text-fg-muted">
-          Partner share accrues to feeClaimer. Default: deployer wallet.
-          Optional advanced override below.
+          Partner share accrues to the fee claimer. The equity preset uses the published partner wallet when one is configured. Otherwise the deployer wallet is the claimer.
         </p>
         <label className="block space-y-1.5">
           <span className="ec-label">
@@ -1295,7 +1361,7 @@ function StepFees({
           </span>
           <input
             className="ec-input font-mono text-xs"
-            placeholder="Leave blank to use your wallet"
+            placeholder={resolvePartnerFeeClaimer(state.presetId, "") || "Leave blank to use your wallet"}
             value={state.feeClaimer}
             onChange={(e) => patch({ feeClaimer: e.target.value.trim() })}
           />

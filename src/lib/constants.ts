@@ -5,6 +5,7 @@ import {
 } from "@meteora-ag/dynamic-bonding-curve-sdk";
 import { NATIVE_MINT } from "@solana/spl-token";
 import { PublicKey } from "@solana/web3.js";
+import { stockQuoteForMint, type QuoteId } from "@/lib/quotes/catalog";
 
 export const DBC_PROGRAM_ID = DYNAMIC_BONDING_CURVE_PROGRAM_ID;
 export const DAMM_V2_PROGRAM = DAMM_V2_PROGRAM_ID;
@@ -19,7 +20,7 @@ export const USDC_MINT_DEVNET = new PublicKey(
   "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
 );
 
-export type QuoteLabel = "SOL" | "USDC";
+export type { QuoteId as QuoteLabel } from "@/lib/quotes/catalog";
 
 /**
  * Devnet/testnet only: a 6-decimal SPL mint used as the "USDC" quote instead
@@ -66,15 +67,19 @@ export function knownUsdcMints(): string[] {
   return out;
 }
 
-export function quoteLabelForMint(mint: PublicKey | string): QuoteLabel {
+export function quoteLabelForMint(mint: PublicKey | string): QuoteId | null {
   const s = typeof mint === "string" ? mint : mint.toBase58();
   if (s === WSOL_MINT.toBase58()) return "SOL";
   if (isUsdcMint(s)) return "USDC";
-  return "SOL";
+  return stockQuoteForMint(s)?.id ?? null;
 }
 
-export function quoteDecimalsForMint(mint: PublicKey | string): number {
-  return quoteLabelForMint(mint) === "USDC" ? 6 : 9;
+export function quoteDecimalsForMint(mint: PublicKey | string): number | null {
+  const label = quoteLabelForMint(mint);
+  if (label === "USDC") return 6;
+  if (label === "SOL") return 9;
+  if (!label) return null;
+  return stockQuoteForMint(typeof mint === "string" ? mint : mint.toBase58())?.decimals ?? null;
 }
 
 export function isPlaceholderMetadataUri(uri: string): boolean {

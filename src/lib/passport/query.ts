@@ -1,5 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import { getCluster, knownUsdcMints, WSOL_MINT } from "@/lib/constants";
+import { mintHintForQuote } from "@/lib/quotes/resolve";
 import { withReadConnection, getServerConnection } from "@/lib/connection";
 import { fetchPoolSnapshot } from "@/lib/dbc/migrate";
 import { expectedDammDestination, verifyDammV2Pool } from "@/lib/dbc/migrate";
@@ -77,7 +78,8 @@ function percentage(value: unknown): number | null {
 function quoteMintFor(quote: string | null): string | null {
   if (quote === "SOL") return WSOL_MINT.toBase58();
   if (quote === "USDC") return knownUsdcMints()[0] ?? null;
-  return null;
+  if (!quote) return null;
+  return mintHintForQuote(quote);
 }
 
 function policyFields(policy: { requested: ConstraintBudget; applied: ConstraintBudget; relaxed: ConstraintChange[] } | undefined) {

@@ -34,7 +34,7 @@ A deterministic fingerprint binds the reviewed configuration to deployment and r
 
 **Deployment verified does not mean constraints passed.** It means the on-chain configuration matches the recorded design. Journey's constraints-not-met disclosure remains alongside its successful readback. Verification does not prove fair value, shareholder rights, asset backing, or regulatory compliance.
 
-Registry registration and refresh require a readable configuration and an explicit WSOL or known USDC quote mint. Missing configuration evidence fails closed; an unsupported mint is not labelled SOL.
+Registry registration and refresh require a readable configuration and a quote mint in the catalog: WSOL, known USDC, or a pinned tokenized-stock mint. Missing configuration evidence fails closed. An unsupported mint is not labelled SOL. A stock quote is the quote asset. It does not make the launched token a share.
 
 ## Market Studio visual system
 

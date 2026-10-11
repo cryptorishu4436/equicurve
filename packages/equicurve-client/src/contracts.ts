@@ -8,7 +8,7 @@ export type Constraints = {
 
 export type DesignRequest = {
   schemaVersion: "1";
-  quote: "SOL" | "USDC";
+  quote: string;
   raiseTarget: string;
   typicalTrade: string;
   participants: number;

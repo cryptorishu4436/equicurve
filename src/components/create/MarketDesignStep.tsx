@@ -13,7 +13,8 @@ import { deploymentAllowed, designPolicy, toDesignedMarket } from "@/lib/market/
 import type { CandidateReport, ConstraintBudget, LaunchPolicy, ScenarioTracePoint } from "@/lib/market/types";
 import { ConstraintBudgetEditor } from "./ConstraintBudgetEditor";
 import { RobustnessPanel } from "./RobustnessPanel";
-import type { WizardState } from "./wizardTypes";
+import { quoteDecimals } from "@/lib/quotes/catalog";
+import { wizardGraduation, type WizardState } from "./wizardTypes";
 
 function pct(n: number): string {
   return `${Math.round(n * 1000) / 10}%`;
@@ -103,7 +104,7 @@ export function MarketDesignStep({
   const [editorEpoch, setEditorEpoch] = useState(0);
   const [adjustingBudget, setAdjustingBudget] = useState(false);
   const shared = getOptionalPoolConfigKey();
-  const decimals = state.quote === "USDC" ? 6 : 9;
+  const decimals = quoteDecimals(state.quote);
   const assumptions = scenarioAssumptions(state.assetKind);
   const currentKey = `${briefKey(state)}|${budgetKey(state.constraintDraft)}`;
   const stale = policy != null && ranKey !== currentKey;
@@ -128,6 +129,7 @@ export function MarketDesignStep({
             lpLockPct: state.lpLockPct,
             antiSniper: state.antiSniper,
             stressPaths: state.stressPaths,
+            graduation: wizardGraduation(state),
           },
           accepted ? { acceptedBudget: accepted } : undefined,
         );

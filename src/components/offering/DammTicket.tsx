@@ -87,7 +87,7 @@ export function DammTicket({
   const [fundingCheck, setFundingCheck] = useState<TradeFundingEvidence | null>(null);
 
   const dammConfig = dammConfigProp ?? null;
-  const quoteLabel = quoteLabelForMint(quoteMint);
+  const quoteLabel = quoteLabelForMint(quoteMint) ?? "quote";
   const inputDecimals = snap?.exists ? pickMints(snap, direction).inputDecimals : null;
   const amountError = tradeAmountError(amount, inputDecimals);
 

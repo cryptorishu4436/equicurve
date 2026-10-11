@@ -10,6 +10,7 @@ import { getDbcClient } from "./client";
 import { planBuy, type BuyPlan } from "./fill";
 import { requireDbcPool, type FetchedDbcPool } from "./poolAccount";
 import { isUsdcMint, WSOL_MINT } from "@/lib/constants";
+import { stockQuoteForMint } from "@/lib/quotes/catalog";
 
 export type SwapDirection = "buy" | "sell";
 
@@ -27,7 +28,7 @@ export function swapQuoteFailureMessage(direction: SwapDirection, message: strin
 function expectedQuoteDecimals(mint: PublicKey): number | null {
   if (mint.equals(WSOL_MINT)) return 9;
   if (isUsdcMint(mint)) return 6;
-  return null;
+  return stockQuoteForMint(mint.toBase58())?.decimals ?? null;
 }
 
 /** Deterministic key of the DBC pool state a quote depends on. */
@@ -133,7 +134,7 @@ export async function quoteAndBuildSwap(args: {
   const expectedQ = expectedQuoteDecimals(quoteMint);
   if (expectedQ == null) {
     throw new EquiCurveError(
-      `Unsupported quote mint ${quoteMint.toBase58()} (EquiCurve supports SOL / USDC).`,
+      `Unsupported quote mint ${quoteMint.toBase58()}. EquiCurve supports SOL, USDC, and the pinned stock-quote catalog.`,
       "VALIDATION",
     );
   }

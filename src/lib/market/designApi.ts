@@ -4,7 +4,9 @@ import { canonicalMarketConfig, marketConfigFingerprint, migrationAttestation } 
 import { designPolicy, deploymentAllowed, materializeRecipe } from "./policy";
 import type { CandidateReport, ConstraintBudget, LaunchBrief, LaunchPolicy } from "./types";
 import { DEVELOPER_API_ENGINE_VERSION, DEVELOPER_API_FINGERPRINT_VERSION, DEVELOPER_API_SCHEMA_VERSION } from "./apiVersion";
-import { getUsdcMint, WSOL_MINT } from "@/lib/constants";
+import { attestGraduation, parseGraduationPlan } from "@/lib/graduation/plan";
+import { QUOTE_ID_LIST } from "@/lib/quotes/catalog";
+import { resolveActiveQuote } from "@/lib/quotes/resolve";
 
 export const DESIGN_API_ENGINE_VERSION = DEVELOPER_API_ENGINE_VERSION;
 export const DESIGN_API_SCHEMA_VERSION = DEVELOPER_API_SCHEMA_VERSION;
@@ -29,9 +31,20 @@ const constraints = z.object({
   if (value.minRetailProgress < 0 || value.minRetailProgress > 1) ctx.addIssue({ code: "custom", path: ["minRetailProgress"], message: "Must be from 0 to 1" });
 });
 
+const graduationInputSchema = z.discriminatedUnion("venue", [
+  z.object({ venue: z.literal("damm-v2") }).strict(),
+  z.object({
+    venue: z.literal("dlmm"),
+    binStep: z.number().int(),
+    feeBps: z.number().int(),
+    rangeBins: z.number().int(),
+  }).strict(),
+]);
+
 export const designRequestSchema = z.object({
   schemaVersion: z.literal("1"),
-  quote: z.enum(["SOL", "USDC"]),
+  quote: z.enum(QUOTE_ID_LIST),
+  graduation: graduationInputSchema.optional(),
   raiseTarget: decimal,
   typicalTrade: decimal,
   participants: z.number().int().min(1).max(1_000_000),
@@ -85,6 +98,7 @@ function briefFromRequest(input: DesignApiRequest): LaunchBrief {
     antiSniper: input.market.antiSniper,
     stressPaths: input.market.stressPaths,
     seed: input.market.seed,
+    ...(input.graduation ? { graduation: parseGraduationPlan(input.graduation) } : {}),
   };
 }
 
@@ -148,6 +162,7 @@ export function serializeDesign(policy: LaunchPolicy) {
       candidates: policy.candidates.map((row) => candidateSummary(row, frontier)),
       search: policy.search,
       brief: policy.brief,
+      graduation: attestGraduation(policy.brief.graduation),
       targetRaiseAtoms: policy.targetRaiseAtoms,
     },
   };
@@ -233,11 +248,16 @@ function publicConfig(config: ReturnType<typeof materializeRecipe>, quote: Launc
   const curve = Array.isArray(c.curve) ? c.curve as Array<Record<string, unknown>> : [];
   const atom = (value: unknown) => typeof value === "bigint" ? value.toString(10) : value == null ? null : String(value);
   const object = (value: Record<string, unknown> | null | undefined) => value ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, atom(item)])) : null;
+  const resolved = resolveActiveQuote(quote);
   return {
     quote: {
       label: quote,
-      decimals: quote === "USDC" ? 6 : 9,
-      mint: quote === "USDC" ? getUsdcMint()?.toBase58() ?? null : WSOL_MINT.toBase58(),
+      decimals: resolved.decimals,
+      mint: resolved.mint,
+      availableOnCluster: resolved.available,
+      unavailableReason: resolved.unavailableReason,
+      issuer: resolved.issuer,
+      claim: resolved.claim,
     },
     sqrtStartPrice: atom(c.sqrtStartPrice),
     migrationQuoteThreshold: atom(c.migrationQuoteThreshold),
@@ -251,7 +271,7 @@ function publicConfig(config: ReturnType<typeof materializeRecipe>, quote: Launc
     enableFirstSwapWithMinFee: Boolean(c.enableFirstSwapWithMinFee),
     collectFeeMode: atom(c.collectFeeMode),
     migrationOption: atom(c.migrationOption),
-    tokenQuoteDecimal: atom(c.tokenQuoteDecimal ?? (quote === "USDC" ? 6 : 9)),
+    tokenQuoteDecimal: atom(c.tokenQuoteDecimal ?? resolved.decimals),
     tokenBaseDecimal: atom(c.tokenBaseDecimal ?? 9),
     migration: migrationAttestation(config),
     units: {

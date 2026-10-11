@@ -13,7 +13,7 @@ import {
 } from "@/lib/dbc/presets";
 import type { PresetId } from "@/lib/dbc/types";
 
-const QUOTE_DECIMALS: Record<PresetQuote, number> = { SOL: 9, USDC: 6 };
+const QUOTE_DECIMALS: Record<PresetQuote, number> = { SOL: 9, USDC: 6, STOCK: 8 };
 
 export function presetThresholdLabel(id: PresetId, quote: PresetQuote, maxFrac = 2): string {
   return `${formatAtoms(presetMigrationThresholdAtoms(id, quote), QUOTE_DECIMALS[quote], maxFrac)} ${quote}`;

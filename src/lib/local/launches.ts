@@ -4,7 +4,8 @@
  */
 
 import type { Sector } from "@/lib/demo/offerings";
-import type { PresetId } from "@/lib/dbc/types";
+import type { PresetId, QuoteLabel } from "@/lib/dbc/types";
+import type { GraduationAttestation } from "@/lib/graduation/plan";
 import type { DesignedMarket } from "@/lib/market/types";
 import { clearPriceHistory } from "@/lib/local/priceHistory";
 
@@ -25,7 +26,9 @@ export type StoredLaunch = {
   ticker: string;
   thesis: string;
   sector: Sector;
-  quote: "SOL" | "USDC";
+  quote: QuoteLabel;
+  /** Present when Create stored a post-curve venue. Older records omit it. */
+  graduation?: GraduationAttestation;
   raiseTarget: number;
   website?: string;
   xProfile?: string;

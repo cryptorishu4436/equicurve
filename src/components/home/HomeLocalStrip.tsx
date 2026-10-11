@@ -13,7 +13,7 @@ function toCard(l: StoredLaunch): DemoOffering {
     ticker: l.ticker,
     sector: l.sector,
     thesis: l.thesis,
-    quote: l.quote === "USDC" ? "USDC" : "SOL",
+    quote: l.quote,
     raiseTarget: l.raiseTarget,
     raised: 0,
     presetId: l.presetId,

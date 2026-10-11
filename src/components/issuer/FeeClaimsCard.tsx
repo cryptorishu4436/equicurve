@@ -19,9 +19,11 @@ import { pushActivity } from "@/lib/local/launches";
 import { transactionNotice } from "@/lib/transactionUi";
 import { signAndSendTransaction } from "@/lib/send";
 import { formatQuoteAtoms } from "@/lib/amounts";
+import type { QuoteLabel } from "@/lib/dbc/types";
+import { quoteDecimals } from "@/lib/quotes/catalog";
 
 /** Exact atoms → display (string math; no float precision loss). */
-function formatQuoteAmount(raw: string, quote: "SOL" | "USDC"): string {
+function formatQuoteAmount(raw: string, quote: QuoteLabel): string {
   try {
     return formatQuoteAtoms(raw, quote);
   } catch {
@@ -35,7 +37,7 @@ function shortPk(pk: string): string {
 
 type Props = {
   pool: string;
-  quote?: "SOL" | "USDC";
+  quote?: QuoteLabel;
 };
 
 /**
@@ -149,7 +151,7 @@ export function FeeClaimsCard({ pool, quote = "SOL" }: Props) {
           <h2 className="font-semibold text-fg-primary">Trading fee claims</h2>
           <p className="mt-0.5 text-xs text-fg-muted">
             Creator vs partner (feeClaimer) are separate SDK paths. Quote
-            decimals: {quote === "USDC" ? "6 (USDC)" : "9 (SOL)"}.
+            decimals: `${quoteDecimals(quote)} (${quote})`.
           </p>
         </div>
         <button

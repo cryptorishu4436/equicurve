@@ -9,6 +9,7 @@
  * - Display formatting may round, but only on the string side.
  */
 import BN from "bn.js";
+import { quoteDecimals, type QuoteId } from "@/lib/quotes/catalog";
 
 export const SOL_DECIMALS = 9;
 export const USDC_DECIMALS = 6;
@@ -148,14 +149,14 @@ export function formatAtoms(
   return neg && out !== "0" ? `-${out}` : out;
 }
 
-/** Format with a quote label (SOL 9 / USDC 6). */
+/** Format with a catalog quote label. */
 export function formatQuoteAtoms(
   value: bigint | BN | string | number,
-  quote: "SOL" | "USDC",
+  quote: QuoteId,
   maxFractionDigits?: number,
 ): string {
-  const decimals = quote === "USDC" ? USDC_DECIMALS : SOL_DECIMALS;
-  return `${formatAtoms(value, decimals, maxFractionDigits ?? (quote === "USDC" ? 4 : 6))} ${quote}`;
+  const decimals = quoteDecimals(quote);
+  return `${formatAtoms(value, decimals, maxFractionDigits ?? (decimals <= 6 ? 4 : 6))} ${quote}`;
 }
 
 /** Safe variant for UI: returns fallback instead of throwing. */
