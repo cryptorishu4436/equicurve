@@ -182,7 +182,6 @@ export async function prepareLaunchTransaction(args: {
         name,
         symbol,
         description: `${name} (${symbol}) — EquiCurve DBC offering`,
-        image: "",
       }),
     )}`;
   } else if (!/^https:\/\//i.test(uri) && !uri.startsWith("data:application/json,") && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/api\/metadata\//.test(uri)) {

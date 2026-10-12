@@ -43,9 +43,9 @@ until display.
 Market Cap is current active-venue price multiplied by verified circulating
 supply. EquiCurve does not yet have a defensible circulating-supply
 methodology that accounts for treasury, protocol locks, curve inventory, DAMM
-reserves, and beneficial ownership. Therefore circulating supply and Market Cap
-are explicitly unavailable in Phase 1; FDV is never substituted into Market
-Cap.
+reserves, and beneficial ownership. The metrics payload therefore leaves
+`marketCapSol` and `marketCapUsd` null. The offering chart shows FDV in the
+MCap row in that case and labels it "price × total supply".
 
 ## Denomination and USD reference
 
@@ -124,9 +124,11 @@ SOL-quoted markets because applying today's SOL/USD reference to old swaps
 would be misleading. USDC quote history may be shown as USD-equivalent under
 the existing policy.
 
-Price formatting uses explicit `SOL`, `USD`, and `lamports` labels. The
-ambiguous `ℓ` notation is not used. Tiny prices retain significant digits, for
-example `0.00000001366 SOL` or `13.66 lamports`.
+Price formatting uses explicit `SOL` and `USD` labels. Tiny prices keep the
+quote unit and their significant digits, for example `0.00000001366 SOL`.
+They are not relabeled as lamports. The chart is a TradingView Lightweight
+Charts terminal: candlesticks or a line, plus quote-volume bars. The price
+scale uses the same SOL or USD quote.
 
 No orderbook, depth, heatmap, PnL overlay, technical indicators, websocket
 stream, fast polling, or multi-market comparison is included in this phase.

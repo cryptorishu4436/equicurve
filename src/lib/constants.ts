@@ -120,6 +120,16 @@ export const HACKATHON = {
   collaborator: "dannxbt",
 } as const;
 
+/**
+ * Public devnet endpoints with no API key. Used only after the app cluster is
+ * confirmed as devnet, and each read still has to match the devnet genesis hash.
+ */
+export const PUBLIC_DEVNET_RPC_URLS = [
+  "https://api.devnet.solana.com",
+  "https://rpc.ankr.com/solana_devnet",
+  "https://solana-devnet.drpc.org",
+] as const;
+
 export function getRpcUrl(): string {
   return (
     process.env.NEXT_PUBLIC_RPC_URL?.trim() ||
@@ -135,7 +145,11 @@ function urlList(raw: string | undefined): string[] {
 export function getDevnetRpcReadUrls(): string[] {
   const primary = getRpcUrl();
   if (getCluster() !== "devnet") return [primary];
-  return [...new Set([primary, ...urlList(process.env.NEXT_PUBLIC_DEVNET_RPC_FALLBACK_URLS)])];
+  return [...new Set([
+    primary,
+    ...urlList(process.env.NEXT_PUBLIC_DEVNET_RPC_FALLBACK_URLS),
+    ...PUBLIC_DEVNET_RPC_URLS,
+  ])];
 }
 
 /** Explicit server-only DEVNET read endpoints; private URLs stay server-side. */
@@ -143,7 +157,7 @@ export function getServerDevnetRpcReadUrls(): string[] {
   const primary = getServerRpcUrl();
   if (getCluster() !== "devnet") return [primary];
   const configured = typeof window === "undefined" ? urlList(process.env.DEVNET_RPC_FALLBACK_URLS) : [];
-  return [...new Set([primary, ...configured])];
+  return [...new Set([primary, ...configured, ...PUBLIC_DEVNET_RPC_URLS])];
 }
 
 /**

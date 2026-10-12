@@ -20,7 +20,10 @@ export const postContentSchema = z.object({
   imageUrl: imageOrEmpty.optional(),
 }).strict();
 
-export const commentContentSchema = z.object({ body: commentSchema }).strict();
+export const commentContentSchema = z.object({
+  body: commentSchema,
+  parentId: z.string().uuid().optional(),
+}).strict();
 export type PostContent = z.infer<typeof postContentSchema>;
 
 function nowIso(nowMs: number): string {
@@ -95,8 +98,22 @@ export async function createComment(args: { post: IssuerPost; signer: string; bo
   if (!parsed.success) return postError(400, "invalid_body", parsed.error.issues[0]?.message ?? "Invalid comment");
   if (args.post.deletedAt) return postError(404, "post_not_found", "Comments are unavailable for a deleted update.");
   if (!walletSchema.safeParse(args.signer).success) return postError(401, "unauthenticated", "Connect and authenticate a wallet first.");
+  if (parsed.data.parentId) {
+    const parent = await args.store.getComment(parsed.data.parentId);
+    if (!parent || parent.deletedAt || parent.postId !== args.post.id) return postError(404, "parent_not_found", "That comment is not on this update.");
+    if (parent.parentId) return postError(400, "nested_reply", "Replies are one level deep.");
+  }
   const now = nowIso(args.nowMs ?? Date.now());
-  const comment: CommunityComment = { id: newCommunityId(), postId: args.post.id, authorWallet: args.signer, body: parsed.data.body, createdAt: now, updatedAt: now, revision: 1 };
+  const comment: CommunityComment = {
+    id: newCommunityId(),
+    postId: args.post.id,
+    authorWallet: args.signer,
+    body: parsed.data.body,
+    ...(parsed.data.parentId ? { parentId: parsed.data.parentId } : {}),
+    createdAt: now,
+    updatedAt: now,
+    revision: 1,
+  };
   return { ok: true, comment: await args.store.putComment(comment) };
 }
 
@@ -113,15 +130,36 @@ export async function editComment(args: { comment: CommunityComment; post: Issue
 
 export async function deleteComment(args: { comment: CommunityComment; post: IssuerPost; signer: string; store: CommunityStore; nowMs?: number }): Promise<{ ok: true; comment: CommunityComment } | ReturnType<typeof postError>> {
   if (args.post.deletedAt) return postError(404, "post_not_found", "Comments are unavailable for a deleted update.");
-  if (args.comment.postId !== args.post.id || args.comment.authorWallet !== args.signer) return postError(403, "not_author", "Only the comment author may delete this comment.");
+  const canDelete = args.comment.authorWallet === args.signer || args.post.creatorWallet === args.signer;
+  if (args.comment.postId !== args.post.id || !canDelete) return postError(403, "not_author", "Only the comment author or the market creator may delete this comment.");
   if (args.comment.deletedAt) return postError(409, "deleted_comment", "Comment is already deleted.");
   const now = nowIso(args.nowMs ?? Date.now());
   const next = { ...args.comment, deletedAt: now, updatedAt: now, revision: args.comment.revision + 1 };
   return { ok: true, comment: await args.store.putComment(next) };
 }
 
-export function toPublicPost(post: IssuerPost, commentCount: number): PublicIssuerPost {
-  return { ...post, creatorVerified: true, edited: Date.parse(post.updatedAt) > Date.parse(post.createdAt), commentCount };
+export function toPublicPost(post: IssuerPost, commentCount: number, viewerWallet?: string | null): PublicIssuerPost {
+  const { likeWallets, ...rest } = post;
+  const likes = likeWallets ?? [];
+  return {
+    ...rest,
+    creatorVerified: true,
+    edited: Date.parse(post.updatedAt) > Date.parse(post.createdAt),
+    commentCount,
+    likeCount: likes.length,
+    liked: !!viewerWallet && likes.includes(viewerWallet),
+  };
+}
+
+export async function togglePostLike(args: { post: IssuerPost; signer: string; store: CommunityStore }): Promise<{ ok: true; post: IssuerPost; liked: boolean } | ReturnType<typeof postError>> {
+  if (args.post.deletedAt) return postError(404, "post_not_found", "Deleted updates cannot be liked.");
+  if (!walletSchema.safeParse(args.signer).success) return postError(401, "unauthenticated", "Connect and authenticate a wallet first.");
+  const likes = new Set(args.post.likeWallets ?? []);
+  const liked = !likes.has(args.signer);
+  if (liked) likes.add(args.signer);
+  else likes.delete(args.signer);
+  const next: IssuerPost = { ...args.post, likeWallets: [...likes], revision: args.post.revision + 1 };
+  return { ok: true, post: await args.store.putPost(next), liked };
 }
 
 export function toPublicComment(comment: CommunityComment, creatorWallet: string): PublicCommunityComment {

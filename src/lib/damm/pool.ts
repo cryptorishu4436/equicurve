@@ -129,7 +129,7 @@ export async function fetchDammPoolSnapshot(args: {
   ]);
   const readReserve = async (vault: PublicKey): Promise<string | null> => {
     try {
-      const value = await withRpcRetry(() => connection.getTokenAccountBalance(vault, "confirmed"));
+      const value = await withRpcRetry(() => connection.getTokenAccountBalance(vault, "processed"));
       return value.value.amount;
     } catch (e) {
       if (isTransientRpcError(e)) throw e;

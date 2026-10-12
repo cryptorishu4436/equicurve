@@ -11,38 +11,50 @@ function fixedSignificant(value: number, digits = 6): string {
   return value.toFixed(places).replace(/\.?0+$/, "");
 }
 
+/** Keep a plain decimal string's leading zeros. Number() would round 0.00000001366. */
+function formatDecimalString(value: string, significant = 8): string | null {
+  const trimmed = value.trim();
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) return null;
+  const [whole, frac = ""] = trimmed.split(".");
+  if (whole !== "0") {
+    const numeric = Number(trimmed);
+    return Number.isFinite(numeric) && numeric > 0 ? fixedSignificant(numeric, significant) : null;
+  }
+  const zeros = frac.match(/^0*/)?.[0].length ?? 0;
+  const digits = frac.slice(zeros, zeros + significant).replace(/0+$/, "");
+  if (!digits) return null;
+  return `0.${"0".repeat(zeros)}${digits}`;
+}
+
+function quotePrice(precise: string, quote: string, ticker?: string) {
+  const unit = quote === "USD" ? `$${precise}` : `${precise} ${quote}`;
+  return {
+    primary: ticker ? `${unit} / ${ticker}` : unit,
+    secondary: unit,
+  };
+}
+
 export function formatTokenPrice(price: number, quote: string, ticker = "token") {
   if (!(price > 0) || !Number.isFinite(price)) return { primary: "Unavailable", secondary: "Price unavailable" };
-  if (quote === "SOL" && price < 0.000001) {
-    const lamports = price * 1_000_000_000;
-    return {
-      primary: `${lamports.toFixed(lamports < 1 ? 4 : 2)} lamports / ${ticker}`,
-      secondary: `${fixedSignificant(price, 8)} SOL / ${ticker}`,
-    };
-  }
-  const precise = fixedSignificant(price, 8);
-  return { primary: `${precise} ${quote} / ${ticker}`, secondary: `${precise} ${quote}` };
+  return quotePrice(fixedSignificant(price, 8), quote, ticker);
 }
 
 /** Exact-string counterpart used by the server metrics contract. */
 export function formatTokenPriceExact(price: string | null, quote: string, ticker = "token") {
   if (!price) return { primary: "Unavailable", secondary: "Price unavailable" };
-  const numeric = Number(price);
-  if (!(numeric > 0) || !Number.isFinite(numeric)) return { primary: "Unavailable", secondary: "Price unavailable" };
-  if (quote === "SOL" && numeric < 0.000001) {
-    return {
-      primary: `${fixedSignificant(numeric * 1_000_000_000, 8)} lamports / ${ticker}`,
-      secondary: `${fixedSignificant(numeric, 8)} SOL / ${ticker}`,
-    };
-  }
-  const precise = fixedSignificant(numeric, 8);
-  return { primary: `${precise} ${quote} / ${ticker}`, secondary: `${precise} ${quote}` };
+  const precise = formatDecimalString(price, 8) ?? (() => {
+    const numeric = Number(price);
+    return numeric > 0 && Number.isFinite(numeric) ? fixedSignificant(numeric, 8) : null;
+  })();
+  if (!precise) return { primary: "Unavailable", secondary: "Price unavailable" };
+  return quotePrice(precise, quote, ticker);
 }
 
 export function formatPriceAxis(price: number, quote: string): string {
   if (!(price >= 0) || !Number.isFinite(price)) return "—";
-  if (quote === "SOL" && price < 0.000001) return `${fixedSignificant(price * 1_000_000_000, 6)} lamports`;
-  return fixedSignificant(price, 4);
+  if (price === 0) return quote === "USD" ? "$0" : "0";
+  const precise = fixedSignificant(price, price < 0.001 ? 8 : 4);
+  return quote === "USD" ? `$${precise}` : precise;
 }
 
 export function formatMetricValue(value: string | null, unit: "SOL" | "USD"): string {

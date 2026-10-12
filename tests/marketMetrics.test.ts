@@ -84,8 +84,8 @@ describe("Market Terminal V2 metric primitives", () => {
   });
 
   it("formats a tiny SOL price without ambiguous ell notation", () => {
-    expect(formatTokenPriceExact("0.00000001366", "SOL", "EQFULL").primary).toBe("13.66 lamports / EQFULL");
-    expect(formatPriceAxis(0.00000001366, "SOL")).toBe("13.66 lamports");
+    expect(formatTokenPriceExact("0.00000001366", "SOL", "EQFULL").primary).toBe("0.00000001366 SOL / EQFULL");
+    expect(formatPriceAxis(0.00000001366, "SOL")).toBe("0.00000001366");
   });
 
   it("keeps unknown display values as an em dash", () => {

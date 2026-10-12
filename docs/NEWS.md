@@ -50,7 +50,7 @@ ordering key and query context. The default page is 20 items and the maximum is
 
 ## Non-goals
 
-News does not add likes, reposts, follows, DMs, creator profiles, paid
+News ranking does not use likes. Likes stay on the market update and do not change this score. News does not add reposts, follows, DMs, creator profiles, paid
 promotion, recommendations, notifications, token gates, general user posts,
 scraping, or external social posts. A later production adapter can map the
 same query boundary to sorted sets, secondary indexes, and post-to-comment

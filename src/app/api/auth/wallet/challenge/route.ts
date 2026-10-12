@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCluster } from "@/lib/constants";
-import { issueWalletChallenge, walletChallengeRequestSchema } from "@/lib/community/auth";
+import { authDomainFromRequest, issueWalletChallenge, walletChallengeRequestSchema } from "@/lib/community/auth";
 import { assertCommunityAuthStorage } from "@/lib/community/auth";
 import { clientKey, readJsonBody } from "@/lib/server/http";
 import { limitRequest } from "@/lib/server/rateLimit";
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid wallet", code: "invalid_body" }, { status: 400 });
   try {
     assertCommunityAuthStorage();
-    const issued = await issueWalletChallenge({ wallet: parsed.data.wallet, cluster: getCluster() });
+    const issued = await issueWalletChallenge({ wallet: parsed.data.wallet, cluster: getCluster(), domain: authDomainFromRequest(req) });
     return NextResponse.json({ ok: true, ...issued.challenge, message: issued.message });
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Wallet authentication storage unavailable", code: "storage_unavailable" }, { status: 503 });

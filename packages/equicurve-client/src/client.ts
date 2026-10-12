@@ -111,6 +111,18 @@ export class EquiCurveClient {
     if (response.design.fingerprint !== reference.selection.fingerprint || response.robustness.fingerprint !== reference.selection.fingerprint) throw new EquiCurveProtocolError("Robustness fingerprint does not match the design reference.");
     return response;
   }
+  async getMarket(pool: string): Promise<{ ok: boolean; lifecycle: string | null; progress: number | null; quote: string | null; reason: string | null }> {
+    const payload = await this.get(`/api/v1/markets/${encodeURIComponent(pool)}`);
+    const value = record(payload, "Market response");
+    if (value.ok !== true) {
+      const reason = value.reason == null ? null : stringField(value.reason, "Market reason");
+      return { ok: false, lifecycle: null, progress: null, quote: null, reason };
+    }
+    if (typeof value.lifecycle !== "string" || !value.lifecycle) throw new EquiCurveProtocolError("Market response is missing lifecycle.");
+    if (value.progress != null && typeof value.progress !== "number") throw new EquiCurveProtocolError("Market progress is malformed.");
+    const quote = value.quote == null ? null : stringField(value.quote, "Market quote");
+    return { ok: true, lifecycle: value.lifecycle, progress: typeof value.progress === "number" ? value.progress : null, quote, reason: null };
+  }
   async verifyDeployment(pool: string): Promise<{ ok: boolean; verified: boolean; reason: string | null }> {
     const payload = await this.get(`/api/v1/deployments/${encodeURIComponent(pool)}/verify`);
     const value = record(payload, "Verify response");

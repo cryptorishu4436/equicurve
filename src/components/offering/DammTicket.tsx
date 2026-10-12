@@ -9,6 +9,7 @@ import {
   DOCS,
   explorerAddressUrl,
   quoteLabelForMint,
+  WSOL_MINT,
 } from "@/lib/constants";
 import {
   buildClaimPositionFeeTx,
@@ -34,11 +35,14 @@ import { formatPermanentLock, formatQuoteReserveLabel, formatTokenPrice } from "
 import { transactionNotice } from "@/lib/transactionUi";
 import { withReadConnection } from "@/lib/connection";
 import {
+  readSwapInputBalance,
   readTradeFunding,
   tradeAmountError,
   tradeFundingError,
   type TradeFundingEvidence,
 } from "@/lib/trade/validation";
+import { TradeAmountField } from "@/components/trade/TradeAmountField";
+import { TransactionReceipt } from "@/components/trade/TransactionReceipt";
 
 type Props = {
   dbcPool: string;
@@ -51,6 +55,7 @@ type Props = {
   gateOk?: boolean;
   lockPct?: number | null;
   onMarketChanged?: () => void;
+  refreshToken?: number;
 };
 
 function shortAddr(value: string, n = 4) {
@@ -71,6 +76,7 @@ export function DammTicket({
   gateOk,
   lockPct,
   onMarketChanged,
+  refreshToken = 0,
 }: Props) {
   const { connection } = useConnection();
   const wallet = useWallet();
@@ -79,12 +85,15 @@ export function DammTicket({
   const [error, setError] = useState<string | null>(null);
   const [direction, setDirection] =
     useState<DammSwapDirection>("quote_to_base");
-  const [amount, setAmount] = useState("0.1");
+  const [amount, setAmount] = useState("");
   const [quote, setQuote] = useState<DammQuoteResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [pendingTx, setPendingTx] = useState<Transaction | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [fundingCheck, setFundingCheck] = useState<TradeFundingEvidence | null>(null);
+  const [spendable, setSpendable] = useState<bigint | null>(null);
+  const [receipt, setReceipt] = useState<{ purpose: string; signature: string; explorerUrl: string } | null>(null);
+  const [reservesAt, setReservesAt] = useState<number | null>(null);
 
   const dammConfig = dammConfigProp ?? null;
   const quoteLabel = quoteLabelForMint(quoteMint) ?? "quote";
@@ -92,6 +101,7 @@ export function DammTicket({
   const amountError = tradeAmountError(amount, inputDecimals);
 
   const refresh = useCallback(async () => {
+    void refreshToken;
     try {
       setError(null);
       const result = await withReadConnection(connection, async (readConnection) => {
@@ -125,6 +135,7 @@ export function DammTicket({
       }
       const next = result.next;
       setSnap(next);
+      setReservesAt(Date.now());
       // Persist only after the pool account was actually fetched + mint-checked.
       if (next.exists && next.address !== storedDammPool) {
         updateLaunch(dbcPool, { dammPool: next.address });
@@ -132,8 +143,6 @@ export function DammTicket({
       setPositions(result.nextPositions);
     } catch (e) {
       setError(toUserMessage(e));
-      setSnap(null);
-      setPositions([]);
     }
   }, [
     connection,
@@ -143,11 +152,43 @@ export function DammTicket({
     dammConfig,
     dbcPool,
     wallet.publicKey,
+    refreshToken,
   ]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    setAmount("");
+    setDirection("quote_to_base");
+    setQuote(null);
+    setPendingTx(null);
+    setNotice(null);
+    setReceipt(null);
+    setFundingCheck(null);
+  }, [dbcPool]);
+
+  const inputMint = snap?.exists
+    ? (direction === "quote_to_base" ? quoteMint : baseMint)
+    : null;
+  useEffect(() => {
+    if (!wallet.publicKey || !inputMint) {
+      setSpendable(null);
+      return;
+    }
+    let cancelled = false;
+    readSwapInputBalance({ connection, owner: wallet.publicKey, mint: new PublicKey(inputMint) })
+      .then((read) => {
+        if (!cancelled) setSpendable(read.atoms);
+      })
+      .catch(() => {
+        if (!cancelled) setSpendable(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, wallet.publicKey, inputMint, refreshToken]);
 
   function ensureGate(): boolean {
     if (gateOk === true) return true;
@@ -248,11 +289,13 @@ export function DammTicket({
         at: new Date().toISOString(),
       });
       const txNotice = transactionNotice(sig, "DAMM v2 swap confirmed");
+      setReceipt({ purpose: "DAMM v2 swap confirmed", signature: sig, explorerUrl: txNotice.explorerUrl });
       toast.success(txNotice.message, { action: { label: "Explorer", onClick: () => window.open(txNotice.explorerUrl, "_blank", "noopener,noreferrer") } });
       setQuote(null);
       setPendingTx(null);
       setFundingCheck(null);
       setNotice(null);
+      setAmount("");
       await refresh();
       onMarketChanged?.();
     } catch (e) {
@@ -320,6 +363,7 @@ export function DammTicket({
         at: new Date().toISOString(),
       });
       const txNotice = transactionNotice(sig, "Position fees claimed");
+      setReceipt({ purpose: "Position fees claimed", signature: sig, explorerUrl: txNotice.explorerUrl });
       toast.success(txNotice.message, { action: { label: "Explorer", onClick: () => window.open(txNotice.explorerUrl, "_blank", "noopener,noreferrer") } });
       await refresh();
       onMarketChanged?.();
@@ -379,6 +423,7 @@ export function DammTicket({
               <div className="rounded-input border border-line bg-subtle p-3"><dt className="text-fg-muted">{formatQuoteReserveLabel(quoteLabel)}</dt><dd className="mt-1 font-mono text-fg-primary">{snap.quoteMint === snap.tokenAMint ? (snap.tokenAReserve == null ? "Unavailable" : `${formatRaw(snap.tokenAReserve, snap.tokenADecimals)} ${quoteLabel}`) : (snap.tokenBReserve == null ? "Unavailable" : `${formatRaw(snap.tokenBReserve, snap.tokenBDecimals)} ${quoteLabel}`)}</dd></div>
               <div className="rounded-input border border-line bg-subtle p-3"><dt className="text-fg-muted">Base-token reserve</dt><dd className="mt-1 font-mono text-fg-primary">{snap.baseMint === snap.tokenAMint ? (snap.tokenAReserve == null ? "Unavailable" : formatRaw(snap.tokenAReserve, snap.tokenADecimals)) : (snap.tokenBReserve == null ? "Unavailable" : formatRaw(snap.tokenBReserve, snap.tokenBDecimals))}</dd></div>
             </div>
+            {reservesAt != null && <p className="text-[11px] text-fg-muted">Reserves read {new Date(reservesAt).toLocaleTimeString()}.</p>}
             <div className="flex justify-between gap-3"><dt className="text-fg-muted">Current DAMM spot</dt><dd className="text-right font-mono text-fg-primary">{snap.spotQuotePerBase == null ? "Unavailable" : formatTokenPrice(Number(snap.spotQuotePerBase), quoteLabel).primary}</dd></div>
             <div className="flex justify-between gap-3"><dt className="text-fg-muted">Liquidity lock</dt><dd className="text-fg-primary">{formatPermanentLock(lockPct)}</dd></div>
           </>
@@ -516,6 +561,7 @@ export function DammTicket({
                 aria-pressed={direction === "quote_to_base"}
                 onClick={() => {
                   setDirection("quote_to_base");
+                  setAmount("");
                   setQuote(null);
                   setPendingTx(null);
                   setFundingCheck(null);
@@ -532,6 +578,7 @@ export function DammTicket({
                 aria-pressed={direction === "base_to_quote"}
                 onClick={() => {
                   setDirection("base_to_quote");
+                  setAmount("");
                   setQuote(null);
                   setPendingTx(null);
                   setFundingCheck(null);
@@ -540,22 +587,21 @@ export function DammTicket({
                 Sell base for {quoteLabel}
               </button>
             </div>
-            <label className="block text-xs text-fg-muted">
-              Amount (
-              {direction === "quote_to_base" ? quoteLabel : "base tokens"})
-              <input
-                className="ec-input mt-2 w-full py-5 text-2xl tabular-nums"
-                value={amount}
-                onChange={(e) => {
-                  setAmount(e.target.value);
-                  setQuote(null);
-                  setPendingTx(null);
-                  setFundingCheck(null);
-                }}
-                inputMode="decimal"
-              />
-            </label>
-            {amountError && <p className="text-xs text-signal-warn">{amountError}</p>}
+            <TradeAmountField
+              amount={amount}
+              symbol={direction === "quote_to_base" ? quoteLabel : "base tokens"}
+              decimals={inputDecimals}
+              balanceAtoms={spendable}
+              nativeSol={direction === "quote_to_base" && quoteMint === WSOL_MINT.toBase58()}
+              onAmount={(value) => {
+                setAmount(value);
+                setQuote(null);
+                setPendingTx(null);
+                setFundingCheck(null);
+              }}
+            />
+            {amount.trim() && amountError && <p className="text-xs text-signal-warn">{amountError}</p>}
+            {receipt && <TransactionReceipt purpose={receipt.purpose} signature={receipt.signature} explorerUrl={receipt.explorerUrl} />}
             {quote ? (
               <SwapReview
                 title="Review DAMM v2 swap"

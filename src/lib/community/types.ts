@@ -26,14 +26,18 @@ export type IssuerPost = {
   updatedAt: string;
   deletedAt?: string;
   revision: number;
+  /** Wallets that liked this update. Not part of the news ranking. */
+  likeWallets?: string[];
   /** Server-derived and retained for audit; never accepted from the browser. */
   creatorVerified: true;
 };
 
-export type PublicIssuerPost = Omit<IssuerPost, "creatorVerified"> & {
+export type PublicIssuerPost = Omit<IssuerPost, "creatorVerified" | "likeWallets"> & {
   creatorVerified: true;
   edited: boolean;
   commentCount: number;
+  likeCount: number;
+  liked: boolean;
 };
 
 export type CommunityComment = {
@@ -43,6 +47,7 @@ export type CommunityComment = {
   body: string;
   createdAt: string;
   updatedAt: string;
+  parentId?: string;
   deletedAt?: string;
   revision: number;
 };

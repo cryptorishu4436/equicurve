@@ -68,12 +68,12 @@ The shipped preview includes strict Zod validation, machine-readable error codes
 
 ### TypeScript SDK and examples
 
-The shipped source-only `EquiCurveClient` exposes `design()`, `getDesignReference()`, `robustness()`, `buildConfig()`, `verifyDeployment()`, and `assertPipelineIntegrity()`. It remains a thin client with no duplicated market math or independent candidate-ranking implementation. `getMarket()` remains planned.
+The shipped source-only `EquiCurveClient` exposes `design()`, `getDesignReference()`, `robustness()`, `buildConfig()`, `verifyDeployment()`, `getMarket()`, and `assertPipelineIntegrity()`. It remains a thin client with no duplicated market math or independent candidate-ranking implementation.
 
 Reference integration status:
 
 1. **SHIPPED — launchpad adapter:** brief → design → explicit negotiation → robustness → canonical configuration.
-2. **PLANNED — terminal panel:** pool → provenance → lifecycle → deployment verification.
+2. **SHIPPED — terminal panel:** `/terminal` reads one pool and shows provenance, lifecycle, and deployment verification. A missing record or a failed read stays unavailable.
 
 ### Security and exit criteria
 

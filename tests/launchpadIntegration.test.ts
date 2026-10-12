@@ -101,6 +101,19 @@ describe("EquiCurveClient", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("reads a market without treating a missing pool as a lifecycle", async () => {
+    const client = new EquiCurveClient({
+      baseUrl: "http://example.test",
+      fetch: async () => response({ ok: true, lifecycle: "raising", progress: null, quote: "SOL" }),
+    });
+    await expect(client.getMarket("pool")).resolves.toEqual({ ok: true, lifecycle: "raising", progress: null, quote: "SOL", reason: null });
+    const missing = new EquiCurveClient({
+      baseUrl: "http://example.test",
+      fetch: async () => response({ ok: false, reason: "not_found" }, 404),
+    });
+    await expect(missing.getMarket("pool")).resolves.toEqual({ ok: false, lifecycle: null, progress: null, quote: null, reason: "not_found" });
+  });
+
   it("maps API errors to EquiCurveApiError", async () => {
     const client = new EquiCurveClient({ baseUrl: "http://example.test", fetch: async () => response({ ok: false, error: { code: "UNSUPPORTED_QUOTE", message: "SOL or USDC" } }, 422) });
     await expect(client.design(journey)).rejects.toBeInstanceOf(EquiCurveApiError);

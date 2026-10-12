@@ -3,14 +3,14 @@
 import { useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { clsx } from "clsx";
 import { TradePanel } from "@/components/TradePanel";
 import { DammTicket } from "@/components/offering/DammTicket";
 import { FeeClaimsCard } from "@/components/issuer/FeeClaimsCard";
 import { EligibilityGate, useEligibilityGate } from "@/components/gate/EligibilityGate";
-import { PriceHistoryChart } from "@/components/offering/PriceHistoryChart";
+import { PriceHistoryChart, type ChartMarketStrip } from "@/components/offering/PriceHistoryChart";
 import { GraduationCard } from "@/components/offering/GraduationCard";
 import { GraduationPlanCard } from "@/components/offering/GraduationPlanCard";
 import { presetPriceMultiple } from "@/lib/dbc/presets";
@@ -96,6 +96,8 @@ function short(a: string, n = 4) {
 
 export function OfferingDetailClient({ id, demo }: Props) {
   const { connection } = useConnection();
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<TabId>("Overview");
   const [launch, setLaunch] = useState<StoredLaunch | null>(null);
@@ -116,6 +118,7 @@ export function OfferingDetailClient({ id, demo }: Props) {
     change24hPct: string | null;
     quoteMint: string | null;
     complete24h: boolean;
+    rangeVolume: string | null;
   } | null>(null);
   const [holders, setHolders] = useState<HolderHint>({
     supplyAtoms: null,
@@ -135,6 +138,7 @@ export function OfferingDetailClient({ id, demo }: Props) {
     change24hPct: string | null;
     quoteMint: string | null;
     complete24h: boolean;
+    rangeVolume: string | null;
   }) => setHistorySummary(summary), []);
 
   useEffect(() => {
@@ -142,6 +146,15 @@ export function OfferingDetailClient({ id, demo }: Props) {
     const match = TABS.find((value) => value.toLowerCase() === requested);
     if (match) setTab(match);
   }, [searchParams]);
+
+  function selectTab(next: TabId) {
+    setTab(next);
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "Overview") params.delete("tab");
+    else params.set("tab", next.toLowerCase());
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
 
   const illustrative = !!(demo?.illustrative || (demo && !demo.pool && !launch));
 
@@ -409,29 +422,54 @@ export function OfferingDetailClient({ id, demo }: Props) {
   const lifecycle = marketLifecycle(curvePhase, destination);
   const terminalVenue = metrics?.market.activeVenue ?? lifecycle.activeVenue;
   const terminalPrice = denomination === "USD" ? metrics?.price.usdPerToken ?? null : metrics?.price.solPerToken ?? null;
-  const terminalMcap = denomination === "USD" ? metrics?.valuation.marketCapUsd ?? null : metrics?.valuation.marketCapSol ?? null;
+  const circulatingMcap = denomination === "USD" ? metrics?.valuation.marketCapUsd ?? null : metrics?.valuation.marketCapSol ?? null;
+  const fdvValue = denomination === "USD" ? metrics?.valuation.fdvUsd ?? null : metrics?.valuation.fdvSol ?? null;
+  const mcapFromSupply = circulatingMcap == null && fdvValue != null;
+  const terminalMcap = circulatingMcap ?? fdvValue;
   const terminalValue = metricMode === "price" ? terminalPrice : terminalMcap;
-  const terminalDisplay = metricMode === "price"
-    ? (terminalValue
-      ? denomination === "USD"
-        ? `${formatMetricValue(terminalValue, "USD")} / ${ticker}`
-        : formatTokenPriceExact(terminalValue, "SOL", ticker).primary
-      : "—")
-    : formatMetricValue(terminalValue, denomination);
-  const terminalReason = metricMode === "mcap" && !terminalMcap
-    ? "Circulating supply unavailable"
-    : denomination === "USD" && !terminalPrice && metrics?.price.solPerToken
-      ? "USD reference unavailable"
-      : null;
-  // Once the confirmed-history read finishes, its coverage governs the
-  // header metrics. Never replace an incomplete/null history result with a
-  // different provider's sample and label it as canonical 24h data.
+  const priceText = terminalPrice
+    ? denomination === "USD"
+      ? `${formatMetricValue(terminalPrice, "USD")} / ${ticker}`
+      : formatTokenPriceExact(terminalPrice, "SOL", ticker).primary
+    : "—";
+  const terminalDisplay = metricMode === "price" ? priceText : formatMetricValue(terminalValue, denomination);
+  const terminalReason = metricMode === "mcap" && mcapFromSupply
+    ? "Price × total supply. Circulating supply is not measured separately."
+    : metricMode === "mcap" && !terminalMcap
+      ? "Market cap unavailable"
+      : denomination === "USD" && !terminalPrice && metrics?.price.solPerToken
+        ? "USD reference unavailable"
+        : null;
+  // A complete confirmed-history read is the only canonical 24h figure.
+  // A partial scan still shows its observed quote volume as range volume.
   const historyVolume = historySummary
     ? historySummary.complete24h && ((quote === "USDC" && denomination === "USD") || (quote === "SOL" && denomination === "SOL"))
       ? historySummary.volume24h
       : null
     : metrics?.volume24h[denomination === "USD" ? "usd" : "sol"] ?? null;
   const historyChange = historySummary ? historySummary.change24hPct : metrics?.change24hPct ?? null;
+  const volumeValue = historyVolume ?? historySummary?.rangeVolume ?? null;
+  const volumeLabel = historyVolume != null ? "24h Volume" : historySummary?.rangeVolume != null ? "Range volume" : "24h Volume";
+  const volumeUnit: "SOL" | "USD" = historyVolume != null ? denomination : quote === "USDC" ? "USD" : "SOL";
+  const volumeText = volumeValue == null
+    ? "—"
+    : quote !== "SOL" && quote !== "USDC" && historyVolume == null
+      ? `${volumeValue} ${quote}`
+      : formatMetricValue(volumeValue, volumeUnit);
+  const changeText = historyChange == null || historyChange === ""
+    ? "—"
+    : `${Number(historyChange) > 0 ? "+" : ""}${historyChange}%`;
+  const marketStrip: ChartMarketStrip = {
+    price: priceText,
+    mcap: formatMetricValue(terminalMcap, denomination),
+    mcapNote: mcapFromSupply ? "price × total supply" : null,
+    fdv: formatMetricValue(fdvValue, denomination),
+    liquidity: formatMetricValue(metrics?.liquidity[denomination === "USD" ? "usd" : "sol"] ?? null, denomination),
+    volume: volumeText,
+    volumeLabel,
+    change: changeText,
+    holders: metrics?.holders.supplyAtoms ? String(metrics.holders.largestCount) : "—",
+  };
 
   const mint = snapshot?.baseMint ?? launch?.mint ?? demo?.mint;
   const config = snapshot?.config ?? launch?.config;
@@ -516,7 +554,7 @@ export function OfferingDetailClient({ id, demo }: Props) {
                   {mint && poolAddress ? " · " : null}
                   {poolAddress ? (
                     <>
-                      Pool:{" "}
+                      DBC pool:{" "}
                       <a
                         href={explorerAddressUrl(poolAddress)}
                         target="_blank"
@@ -565,6 +603,8 @@ export function OfferingDetailClient({ id, demo }: Props) {
           )}
         </header>
 
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="min-w-0 space-y-5">
         <section className="ec-card space-y-5 p-4 sm:p-5" aria-label="Live market terminal" data-testid="market-terminal">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
@@ -617,63 +657,30 @@ export function OfferingDetailClient({ id, demo }: Props) {
               </div>
             </div>
           </div>
-          <div className="grid gap-px overflow-hidden rounded-input border border-line bg-line sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-            {[
-              { label: "Price", value: metrics?.price[denomination === "USD" ? "usdPerToken" : "solPerToken"] ?? null, kind: "price" as const },
-              { label: "Market Cap", value: metrics?.valuation[denomination === "USD" ? "marketCapUsd" : "marketCapSol"] ?? null, kind: "amount" as const },
-              { label: "FDV", value: metrics?.valuation[denomination === "USD" ? "fdvUsd" : "fdvSol"] ?? null, kind: "amount" as const },
-              { label: "Liquidity", value: metrics?.liquidity[denomination === "USD" ? "usd" : "sol"] ?? null, kind: "amount" as const },
-              { label: "24h Volume", value: historyVolume, kind: "amount" as const },
-              { label: "24h Change", value: historyChange, kind: "change" as const },
-              { label: "Holders", value: metrics?.holders.supplyAtoms ? String(metrics.holders.largestCount) : null, kind: "holders" as const },
-            ].map((stat) => (
-              <div key={stat.label} className="bg-subtle px-3 py-3">
-                <p className="text-[11px] uppercase tracking-[0.12em] text-fg-muted">{stat.label}</p>
-                <p className="mt-1 font-mono text-sm text-fg-primary">
-                  {stat.kind === "price" ? (stat.value ? (denomination === "USD" ? `${formatMetricValue(stat.value, "USD")} / ${ticker}` : formatTokenPriceExact(stat.value, "SOL", ticker).primary) : "—") : stat.kind === "amount" ? formatMetricValue(stat.value, denomination) : stat.kind === "change" ? (stat.value ? `${Number(stat.value) > 0 ? "+" : ""}${stat.value}%` : "—") : (stat.value ?? "—")}
-                </p>
-              </div>
-            ))}
-          </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-muted">
             <span>Price: {metrics?.provenance.price ?? "Unavailable"}</span>
             <span>FDV: {metrics?.provenance.valuation ?? "Unavailable"}</span>
             <span>Holders: {metrics?.provenance.holders ?? "Unavailable"}</span>
           </div>
+          <PriceHistoryChart
+            key={poolAddress ?? "none"}
+            poolAddress={poolAddress}
+            quoteLabel={quote}
+            progress={progressPct == null ? null : progressPct / 100}
+            illustrative={illustrative}
+            priceMultiple={presetPriceMultiple(presetId, quote === "USDC" ? "USDC" : isQuoteId(quote) && isStockQuote(quote) ? "STOCK" : "SOL")}
+            historicalOnly={lifecycle.activeVenue === "DAMM v2"}
+            metricMode={metricMode}
+            denomination={denomination}
+            currentPrice={metrics?.price.quotePerToken ?? null}
+            currentPriceVenue={metrics?.price.sourceVenue === "damm-v2" ? "DAMM v2" : metrics?.price.sourceVenue === "dbc" ? "DBC" : null}
+            marketStrip={marketStrip}
+            onSummary={onHistorySummary}
+            onManualRefresh={() => setHistoryNonce((n) => n + 1)}
+          />
         </section>
-
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px]">
-          <div className="min-w-0 space-y-5">
             <div className="ec-card p-5">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="font-semibold text-fg-primary">Market / curve</h2>
-                {poolAddress && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setHistoryNonce((n) => n + 1);
-                    }}
-                    className="text-xs text-accent hover:underline"
-                  >
-                    Refresh
-                  </button>
-                )}
-              </div>
-              <PriceHistoryChart
-                key={`${poolAddress ?? "none"}-${historyNonce}`}
-                poolAddress={poolAddress}
-                quoteLabel={quote}
-                progress={progressPct == null ? null : progressPct / 100}
-                illustrative={illustrative}
-                priceMultiple={presetPriceMultiple(presetId, quote === "USDC" ? "USDC" : isQuoteId(quote) && isStockQuote(quote) ? "STOCK" : "SOL")}
-                historicalOnly={lifecycle.activeVenue === "DAMM v2"}
-                metricMode={metricMode}
-                denomination={denomination}
-                currentPrice={metrics?.price.quotePerToken ?? null}
-                currentPriceVenue={metrics?.price.sourceVenue === "damm-v2" ? "DAMM v2" : metrics?.price.sourceVenue === "dbc" ? "DBC" : null}
-                onSummary={onHistorySummary}
-              />
-              <div className="mt-4 flex items-center gap-4 border-t border-line pt-4">
+              <div className="flex items-center gap-4">
                 <div className="space-y-1 text-sm text-fg-secondary">
                   <p>
                     Quote progress{" "}
@@ -752,7 +759,7 @@ export function OfferingDetailClient({ id, demo }: Props) {
                   <button
                     key={t}
                     type="button"
-                    onClick={() => setTab(t)}
+                    onClick={() => selectTab(t)}
                     aria-pressed={tab === t}
                     className={clsx(
                       "min-h-11 whitespace-nowrap rounded-lg px-4 py-2 text-sm transition-colors",
@@ -998,7 +1005,7 @@ export function OfferingDetailClient({ id, demo }: Props) {
                 {tab === "On-chain" && (
                   <dl className="space-y-3 font-mono text-xs">
                     {[
-                      { label: "Pool", value: poolAddress },
+                      { label: "DBC pool", value: poolAddress },
                       { label: "Config", value: config },
                       { label: "Mint", value: mint },
                       {
@@ -1016,7 +1023,7 @@ export function OfferingDetailClient({ id, demo }: Props) {
                         link: !!dammConfig,
                       },
                       {
-                        label: "DAMM pool (post)",
+                        label: "DAMM v2 pool",
                         value: dammLive
                           ? (launch?.dammPool ?? "verified (see DAMM ticket)")
                           : migratedOnChain
@@ -1075,6 +1082,7 @@ export function OfferingDetailClient({ id, demo }: Props) {
                 gateOk={eligibility.ok || undefined}
                 lockPct={snapshot.lockPct}
                 onMarketChanged={() => setHistoryNonce((n) => n + 1)}
+                refreshToken={historyNonce}
               />
             ) : null}
 
@@ -1097,6 +1105,7 @@ export function OfferingDetailClient({ id, demo }: Props) {
                 onGateRequired={() => eligibility.ensure()}
                 gateOk={eligibility.ok || undefined}
                 onSwapComplete={() => setHistoryNonce((n) => n + 1)}
+                refreshToken={historyNonce}
               />
             ) : poolAddress && curvePhase === "complete" ? (
               <div className="ec-card space-y-3 border-gold/30 p-5 text-sm">
@@ -1125,6 +1134,7 @@ export function OfferingDetailClient({ id, demo }: Props) {
               <FeeClaimsCard
                 pool={poolAddress}
                 quote={isQuoteId(String(quote)) ? (quote as QuoteLabel) : "SOL"}
+                refreshToken={historyNonce}
               />
             )}
             <div className="ec-card p-4 text-xs text-fg-muted">

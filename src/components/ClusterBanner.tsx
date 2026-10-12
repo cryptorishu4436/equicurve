@@ -6,8 +6,8 @@ import { getCluster, getRpcHost } from "@/lib/constants";
 
 /**
  * Always-visible network honesty strip. Wallet adapters do not reliably expose
- * the wallet's selected cluster, so we surface the app RPC cluster and tip users
- * to match it (wrong-network txs fail at simulation / send).
+ * the wallet's selected cluster, so the strip states the app network. It does
+ * not tell a wallet that is already on that network to change.
  */
 export function ClusterBanner() {
   const wallet = useWallet();
@@ -32,8 +32,7 @@ export function ClusterBanner() {
           {wallet.connected && (
             <span className="text-fg-muted">
               {" "}
-              · wallet connected — set it to <strong>{cluster}</strong> or
-              transactions will fail
+              · wallet connected · app network is <strong>{cluster}</strong>
             </span>
           )}
         </p>

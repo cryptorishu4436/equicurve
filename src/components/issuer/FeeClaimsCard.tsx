@@ -10,10 +10,12 @@ import {
   prepareClaimCreatorFees,
   prepareClaimPartnerFees,
   resolvePoolFeeRoles,
+  feeClaimButtonLabel,
   hasClaimableFees,
   type FeeBreakdown,
   type PoolFeeRoles,
 } from "@/lib/dbc/claim";
+import { TransactionReceipt } from "@/components/trade/TransactionReceipt";
 import { toUserMessage } from "@/lib/errors";
 import { pushActivity } from "@/lib/local/launches";
 import { transactionNotice } from "@/lib/transactionUi";
@@ -38,13 +40,17 @@ function shortPk(pk: string): string {
 type Props = {
   pool: string;
   quote?: QuoteLabel;
+  /** Bumped after a swap so unclaimed fees are read again. */
+  refreshToken?: number;
 };
+
+type ClaimReceipt = { purpose: string; signature: string; explorerUrl: string };
 
 /**
  * Compact creator vs partner fee claim panel for offering detail.
  * Mirrors Issuer dashboard; disables the wrong-role button with an explanation.
  */
-export function FeeClaimsCard({ pool, quote = "SOL" }: Props) {
+export function FeeClaimsCard({ pool, quote = "SOL", refreshToken = 0 }: Props) {
   const { connection } = useConnection();
   const wallet = useWallet();
   const [fees, setFees] = useState<FeeBreakdown | null>(null);
@@ -52,8 +58,11 @@ export function FeeClaimsCard({ pool, quote = "SOL" }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busyCreator, setBusyCreator] = useState(false);
   const [busyPartner, setBusyPartner] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [receipt, setReceipt] = useState<ClaimReceipt | null>(null);
 
   const refresh = useCallback(async () => {
+    void refreshToken;
     try {
       setError(null);
       const pk = new PublicKey(pool);
@@ -67,11 +76,15 @@ export function FeeClaimsCard({ pool, quote = "SOL" }: Props) {
       setError(toUserMessage(e));
       setFees(null);
       setRoles(null);
+    } finally {
+      setLoaded(true);
     }
-  }, [connection, pool]);
+  }, [connection, pool, refreshToken]);
 
   useEffect(() => {
     void refresh();
+    const id = window.setInterval(() => void refresh(), 15_000);
+    return () => window.clearInterval(id);
   }, [refresh]);
 
   const walletPk = wallet.publicKey?.toBase58() ?? null;
@@ -102,6 +115,7 @@ export function FeeClaimsCard({ pool, quote = "SOL" }: Props) {
         at: new Date().toISOString(),
       });
       const txNotice = transactionNotice(sig, "Creator fee claim confirmed");
+      setReceipt({ purpose: "Creator fee claim confirmed", signature: sig, explorerUrl: txNotice.explorerUrl });
       toast.success(txNotice.message, { action: { label: "Explorer", onClick: () => window.open(txNotice.explorerUrl, "_blank", "noopener,noreferrer") } });
       await refresh();
     } catch (e) {
@@ -133,6 +147,7 @@ export function FeeClaimsCard({ pool, quote = "SOL" }: Props) {
         at: new Date().toISOString(),
       });
       const txNotice = transactionNotice(sig, "Partner fee claim confirmed");
+      setReceipt({ purpose: "Partner fee claim confirmed", signature: sig, explorerUrl: txNotice.explorerUrl });
       toast.success(txNotice.message, { action: { label: "Explorer", onClick: () => window.open(txNotice.explorerUrl, "_blank", "noopener,noreferrer") } });
       await refresh();
     } catch (e) {
@@ -143,6 +158,11 @@ export function FeeClaimsCard({ pool, quote = "SOL" }: Props) {
   }
 
   const busy = busyCreator || busyPartner;
+  const feesKnown = loaded && fees !== null && !error;
+  function claimLabel(busyRole: boolean, claimable: boolean, role: "creator" | "partner") {
+    if (!loaded && !error) return busyRole ? "Claiming…" : "Reading fee balance…";
+    return feeClaimButtonLabel({ busy: busyRole, known: feesKnown, claimable, role });
+  }
 
   return (
     <div className="ec-card space-y-3 p-5 text-sm">
@@ -199,7 +219,7 @@ export function FeeClaimsCard({ pool, quote = "SOL" }: Props) {
           disabled={busy || !wallet.publicKey || !isCreator || !creatorClaimable}
           onClick={() => void claimCreator()}
         >
-          {busyCreator ? "Claiming…" : creatorClaimable ? "Claim creator fees" : "No creator fees to claim"}
+          {claimLabel(busyCreator, creatorClaimable, "creator")}
         </button>
         {!isCreator && wallet.publicKey && roles && (
           <p className="text-xs text-fg-muted">
@@ -212,7 +232,7 @@ export function FeeClaimsCard({ pool, quote = "SOL" }: Props) {
           disabled={busy || !wallet.publicKey || !isPartner || !partnerClaimable}
           onClick={() => void claimPartner()}
         >
-          {busyPartner ? "Claiming…" : partnerClaimable ? "Claim partner fees" : "No partner fees to claim"}
+          {claimLabel(busyPartner, partnerClaimable, "partner")}
         </button>
         {!isPartner && wallet.publicKey && roles && (
           <p className="text-xs text-fg-muted">
@@ -227,6 +247,8 @@ export function FeeClaimsCard({ pool, quote = "SOL" }: Props) {
           </p>
         )}
       </div>
+
+      {receipt && <TransactionReceipt purpose={receipt.purpose} signature={receipt.signature} explorerUrl={receipt.explorerUrl} />}
 
       <Link href="/issuer" className="text-xs text-accent hover:underline">
         Open issuer dashboard →

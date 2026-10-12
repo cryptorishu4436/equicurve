@@ -8,12 +8,12 @@ describe("market terminal display", () => {
     expect(formatProgressRatio(null)).toBe("unknown");
   });
 
-  it("renders tiny SOL prices in lamports without losing the precise value", () => {
+  it("renders tiny SOL prices in SOL without relabeling them as lamports", () => {
     expect(formatTokenPrice(1.37e-8, "SOL", "EQFULL")).toEqual({
-      primary: "13.70 lamports / EQFULL",
-      secondary: "0.0000000137 SOL / EQFULL",
+      primary: "0.0000000137 SOL / EQFULL",
+      secondary: "0.0000000137 SOL",
     });
-    expect(formatPriceAxis(6.8e-9, "SOL")).toBe("6.8 lamports");
+    expect(formatPriceAxis(6.8e-9, "SOL")).toBe("0.0000000068");
   });
 
   it("maps lifecycle to one active execution venue", () => {

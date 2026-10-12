@@ -14,6 +14,7 @@ import { ProgressRing } from "@/components/ui/ProgressRing";
 import {
   explorerAddressUrl,
   quoteLabelForMint,
+  WSOL_MINT,
 } from "@/lib/constants";
 import { parseUiAmount, tryFormatAtoms } from "@/lib/amounts";
 import { fetchPoolSnapshot } from "@/lib/dbc/migrate";
@@ -33,11 +34,14 @@ import { hasSelfAttested } from "@/lib/local/eligibility";
 import { signAndSendTransaction } from "@/lib/send";
 import { VerifiedDeployment } from "@/components/VerifiedDeployment";
 import {
+  readSwapInputBalance,
   readTradeFunding,
   tradeAmountError,
   tradeFundingError,
   type TradeFundingEvidence,
 } from "@/lib/trade/validation";
+import { TradeAmountField } from "@/components/trade/TradeAmountField";
+import { TransactionReceipt } from "@/components/trade/TransactionReceipt";
 import { formatProgressRatio } from "@/lib/marketDisplay";
 import { transactionNotice } from "@/lib/transactionUi";
 import { withReadConnection } from "@/lib/connection";
@@ -51,6 +55,8 @@ type Props = {
   gateOk?: boolean;
   /** Called after a confirmed swap so parent can refresh price history. */
   onSwapComplete?: () => void;
+  /** Bumped by the parent so reserves are read again. */
+  refreshToken?: number;
 };
 
 export function TradePanel({
@@ -59,6 +65,7 @@ export function TradePanel({
   onGateRequired,
   gateOk,
   onSwapComplete,
+  refreshToken = 0,
 }: Props) {
   const { connection } = useConnection();
   const wallet = useWallet();
@@ -67,13 +74,16 @@ export function TradePanel({
   const [error, setError] = useState<string | null>(null);
   const [readState, setReadState] = useState<"loading" | "ok" | "not_found" | "rpc_unavailable">("loading");
   const [direction, setDirection] = useState<SwapDirection>("buy");
-  const [amount, setAmount] = useState("0.1");
+  const [amount, setAmount] = useState("");
   const [quoteOut, setQuoteOut] = useState<SwapQuoteView | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [fundingCheck, setFundingCheck] = useState<TradeFundingEvidence | null>(null);
+  const [spendable, setSpendable] = useState<bigint | null>(null);
+  const [receipt, setReceipt] = useState<{ purpose: string; signature: string; explorerUrl: string } | null>(null);
 
   const refresh = useCallback(async () => {
+    void refreshToken;
     try {
       setError(null);
       setSnapshot(
@@ -87,11 +97,39 @@ export function TradePanel({
       setError(toUserMessage(e));
       setSnapshot(null);
     }
-  }, [connection, poolAddress]);
+  }, [connection, poolAddress, refreshToken]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    setAmount("");
+    setDirection("buy");
+    setQuoteOut(null);
+    setNotice(null);
+    setReceipt(null);
+    setFundingCheck(null);
+  }, [poolAddress]);
+
+  const inputMint = direction === "buy" ? snapshot?.quoteMint ?? null : snapshot?.baseMint ?? null;
+  useEffect(() => {
+    if (!wallet.publicKey || !inputMint) {
+      setSpendable(null);
+      return;
+    }
+    let cancelled = false;
+    readSwapInputBalance({ connection, owner: wallet.publicKey, mint: new PublicKey(inputMint) })
+      .then((read) => {
+        if (!cancelled) setSpendable(read.atoms);
+      })
+      .catch(() => {
+        if (!cancelled) setSpendable(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, wallet.publicKey, inputMint, refreshToken]);
 
   function checkGate(): boolean {
     if (gateOk === true || hasSelfAttested()) return true;
@@ -204,11 +242,14 @@ export function TradePanel({
         wallet: wallet.publicKey.toBase58(),
         at: new Date().toISOString(),
       });
-      const txNotice = transactionNotice(sig, direction === "buy" ? "Buy confirmed" : "Sell confirmed");
+      const purpose = direction === "buy" ? "Buy confirmed" : "Sell confirmed";
+      const txNotice = transactionNotice(sig, purpose);
+      setReceipt({ purpose, signature: sig, explorerUrl: txNotice.explorerUrl });
       toast.success(txNotice.message, { action: { label: "Explorer", onClick: () => window.open(txNotice.explorerUrl, "_blank", "noopener,noreferrer") } });
       setQuoteOut(null);
       setFundingCheck(null);
       setNotice(null);
+      setAmount("");
       await refresh();
       onSwapComplete?.();
     } catch (e) {
@@ -411,6 +452,7 @@ export function TradePanel({
               aria-pressed={direction === d}
               onClick={() => {
                 setDirection(d);
+                setAmount("");
                 setQuoteOut(null);
                 setFundingCheck(null);
               }}
@@ -427,22 +469,19 @@ export function TradePanel({
             </button>
           ))}
         </div>
-        <label className="block space-y-1.5">
-          <span className="ec-label">
-            Amount ({direction === "buy" ? quoteSymbol : "base tokens"})
-          </span>
-          <input
-            value={amount}
-            onChange={(e) => {
-              setAmount(e.target.value);
-              setQuoteOut(null);
-              setFundingCheck(null);
-            }}
-            inputMode="decimal"
-            className="ec-input py-5 text-2xl tabular-nums"
-          />
-        </label>
-        {amountError && <p className="mt-2 text-xs text-signal-danger">{amountError}</p>}
+        <TradeAmountField
+          amount={amount}
+          symbol={direction === "buy" ? quoteSymbol : "base tokens"}
+          decimals={direction === "buy" ? snapshot?.quoteDecimals ?? null : snapshot?.baseDecimals ?? null}
+          balanceAtoms={spendable}
+          nativeSol={direction === "buy" && snapshot?.quoteMint === WSOL_MINT.toBase58()}
+          onAmount={(value) => {
+            setAmount(value);
+            setQuoteOut(null);
+            setFundingCheck(null);
+          }}
+        />
+        {amount.trim() && amountError && <p className="mt-2 text-xs text-signal-danger">{amountError}</p>}
 
         {quoteOut ? (
           <SwapReview
@@ -473,6 +512,7 @@ export function TradePanel({
               >
                 {busy ? "Quoting…" : direction === "buy" ? "Review buy" : "Review sell"}
               </button>
+              {receipt && <div className="mt-3"><TransactionReceipt purpose={receipt.purpose} signature={receipt.signature} explorerUrl={receipt.explorerUrl} /></div>}
               {!wallet.publicKey && <p className="mt-3 text-center text-xs text-fg-muted">Connect your wallet to request a quote.</p>}
               {wallet.publicKey && curvePhase !== "raising" && <p className="mt-3 text-center text-xs text-fg-muted">Trading becomes available when this curve is verified as raising.</p>}
             </div>

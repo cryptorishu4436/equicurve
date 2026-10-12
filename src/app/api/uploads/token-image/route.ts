@@ -74,13 +74,15 @@ export async function POST(req: Request) {
   }
   const width = metadata.width ?? 0;
   const height = metadata.height ?? 0;
-  if (width < TOKEN_IMAGE_MIN_DIMENSION || height < TOKEN_IMAGE_MIN_DIMENSION) {
-    return fail(422, "Image dimensions must be at least 256 × 256 pixels.", "too_small");
+  const updateImage = String(form.get("purpose") ?? "") === "update";
+  const minDimension = updateImage ? 64 : TOKEN_IMAGE_MIN_DIMENSION;
+  if (width < minDimension || height < minDimension) {
+    return fail(422, `Image dimensions must be at least ${minDimension} × ${minDimension} pixels.`, "too_small");
   }
   if (width > TOKEN_IMAGE_MAX_DIMENSION || height > TOKEN_IMAGE_MAX_DIMENSION) {
     return fail(422, "Image dimensions must be at most 2048 × 2048 pixels.", "too_large_dimensions");
   }
-  if (width !== height) {
+  if (!updateImage && width !== height) {
     return fail(422, "Token images must be square.", "not_square");
   }
 

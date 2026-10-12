@@ -15,10 +15,12 @@ import {
   prepareClaimCreatorFees,
   prepareClaimPartnerFees,
   resolvePoolFeeRoles,
+  feeClaimButtonLabel,
   hasClaimableFees,
   type FeeBreakdown,
   type PoolFeeRoles,
 } from "@/lib/dbc/claim";
+import { TransactionReceipt } from "@/components/trade/TransactionReceipt";
 import { toUserMessage } from "@/lib/errors";
 import {
   launchesForCreatorOrPartner,
@@ -55,6 +57,8 @@ export function IssuerDashboard() {
   const [feeError, setFeeError] = useState<string | null>(null);
   const [busyCreator, setBusyCreator] = useState(false);
   const [busyPartner, setBusyPartner] = useState(false);
+  const [feesLoaded, setFeesLoaded] = useState(false);
+  const [claimReceipt, setClaimReceipt] = useState<{ purpose: string; signature: string; explorerUrl: string } | null>(null);
 
   useEffect(() => {
     const all = listLaunches();
@@ -83,6 +87,7 @@ export function IssuerDashboard() {
     if (!selected) {
       setFees(null);
       setRoles(null);
+      setFeesLoaded(true);
       return;
     }
     try {
@@ -98,11 +103,15 @@ export function IssuerDashboard() {
       setFeeError(toUserMessage(e));
       setFees(null);
       setRoles(null);
+    } finally {
+      setFeesLoaded(true);
     }
   }, [connection, selected]);
 
   useEffect(() => {
     void refreshFees();
+    const id = window.setInterval(() => void refreshFees(), 15_000);
+    return () => window.clearInterval(id);
   }, [refreshFees]);
 
   const current = launches.find((l) => l.pool === selected);
@@ -155,6 +164,7 @@ export function IssuerDashboard() {
         at: new Date().toISOString(),
       });
       const txNotice = transactionNotice(sig, "Creator fee claim confirmed");
+      setClaimReceipt({ purpose: "Creator fee claim confirmed", signature: sig, explorerUrl: txNotice.explorerUrl });
       toast.success(txNotice.message, { action: { label: "Explorer", onClick: () => window.open(txNotice.explorerUrl, "_blank", "noopener,noreferrer") } });
       await refreshFees();
     } catch (e) {
@@ -189,6 +199,7 @@ export function IssuerDashboard() {
         at: new Date().toISOString(),
       });
       const txNotice = transactionNotice(sig, "Partner fee claim confirmed");
+      setClaimReceipt({ purpose: "Partner fee claim confirmed", signature: sig, explorerUrl: txNotice.explorerUrl });
       toast.success(txNotice.message, { action: { label: "Explorer", onClick: () => window.open(txNotice.explorerUrl, "_blank", "noopener,noreferrer") } });
       await refreshFees();
     } catch (e) {
@@ -199,6 +210,11 @@ export function IssuerDashboard() {
   }
 
   const busy = busyCreator || busyPartner;
+  const feesKnown = feesLoaded && fees !== null && !feeError;
+  function claimLabel(busyRole: boolean, claimable: boolean, role: "creator" | "partner") {
+    if (!feesLoaded && !feeError) return busyRole ? "Claiming…" : "Reading fee balance…";
+    return feeClaimButtonLabel({ busy: busyRole, known: feesKnown, claimable, role });
+  }
 
   return (
     <div className="space-y-6">
@@ -428,7 +444,7 @@ export function IssuerDashboard() {
                         : undefined
                   }
                 >
-                  {busyCreator ? "Claiming…" : creatorClaimable ? "Claim creator fees" : "No creator fees to claim"}
+                  {claimLabel(busyCreator, creatorClaimable, "creator")}
                 </button>
                 {!isCreator && wallet.publicKey && roles && (
                   <p className="text-xs text-fg-muted">
@@ -502,7 +518,7 @@ export function IssuerDashboard() {
                         : undefined
                   }
                 >
-                  {busyPartner ? "Claiming…" : partnerClaimable ? "Claim partner fees" : "No partner fees to claim"}
+                  {claimLabel(busyPartner, partnerClaimable, "partner")}
                 </button>
                 {!isPartner && wallet.publicKey && roles && (
                   <p className="text-xs text-fg-muted">
@@ -518,6 +534,8 @@ export function IssuerDashboard() {
                   </p>
                 )}
               </div>
+
+              {claimReceipt && <TransactionReceipt purpose={claimReceipt.purpose} signature={claimReceipt.signature} explorerUrl={claimReceipt.explorerUrl} />}
 
               <div className="flex flex-wrap gap-2">
                 <button

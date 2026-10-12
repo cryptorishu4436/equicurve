@@ -17,14 +17,16 @@ function failure(result: { status: number; code: string; error: string }) {
   return NextResponse.json({ ok: false, error: result.error, code: result.code }, { status: result.status });
 }
 
-export async function GET(_req: Request, ctx: Ctx) {
+export async function GET(req: Request, ctx: Ctx) {
   const { id } = await ctx.params;
   const resolved = await resolveCommunityMarket(id);
   if (!resolved.ok) return failure(resolved);
+  const session = await getWalletSession(req).catch(() => null);
   try {
     const store = getCommunityStore();
     const posts = await store.listPosts(resolved.market.id);
-    const publicPosts = await Promise.all(posts.map(async (post) => toPublicPost(post, (await store.listComments(post.id)).length)));
+    const viewer = session?.wallet ?? null;
+    const publicPosts = await Promise.all(posts.map(async (post) => toPublicPost(post, (await store.listComments(post.id)).length, viewer)));
     return NextResponse.json({ ok: true, market: resolved.market, posts: publicPosts, count: publicPosts.length }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const status = error instanceof CommunityStorageConfigError ? 503 : 500;

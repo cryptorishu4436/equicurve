@@ -11,9 +11,11 @@ function dataUri(meta: NonNullable<SignedLaunchBody["payload"]["metadata"]> | {
   name: string;
   symbol: string;
   description: string;
-  image: string;
+  image?: string;
 }): string {
-  return `data:application/json,${encodeURIComponent(JSON.stringify(meta))}`;
+  const image = meta.image?.trim();
+  const published = image ? meta : { ...meta, image: undefined };
+  return `data:application/json,${encodeURIComponent(JSON.stringify(published))}`;
 }
 
 /**
@@ -32,7 +34,7 @@ export async function resolveMetadataUri(args: {
     return { uri: trimmed, source: "custom" };
   }
   const meta = args.signed?.payload.metadata;
-  const inline = dataUri(meta ?? { ...args.fallback, image: args.fallback.image ?? "" });
+  const inline = dataUri(meta ?? args.fallback);
   if (!args.signed || !meta) {
     return { uri: inline, source: "data-uri", note: "No wallet signature — using inline data: URI metadata." };
   }

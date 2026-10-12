@@ -30,7 +30,9 @@ export async function GET(_req: Request, ctx: Ctx) {
   if (!meta) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  return NextResponse.json(meta, {
+  const { image, ...withoutImage } = meta;
+  const published = image ? meta : withoutImage;
+  return NextResponse.json(published, {
     headers: {
       "Cache-Control": "public, max-age=60",
       "Access-Control-Allow-Origin": "*",

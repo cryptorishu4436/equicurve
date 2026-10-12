@@ -256,7 +256,27 @@ describe("comments", () => {
     const created = await createComment({ post, signer: other.publicKey.toBase58(), body: { body: "First" }, store });
     if (!created.ok) throw new Error(created.error);
     expect(await editComment({ comment: created.comment, post, signer: owner.publicKey.toBase58(), body: { body: "spoof" }, store })).toMatchObject({ ok: false, status: 403 });
-    expect(await deleteComment({ comment: created.comment, post, signer: owner.publicKey.toBase58(), store })).toMatchObject({ ok: false, status: 403 });
+  });
+
+  it("lets the market creator delete another wallet's comment", async () => {
+    const { store, post } = await makePost();
+    const created = await createComment({ post, signer: other.publicKey.toBase58(), body: { body: "First" }, store });
+    if (!created.ok) throw new Error(created.error);
+    const stranger = Keypair.generate();
+    expect(await deleteComment({ comment: created.comment, post, signer: stranger.publicKey.toBase58(), store })).toMatchObject({ ok: false, status: 403 });
+    expect(await deleteComment({ comment: created.comment, post, signer: owner.publicKey.toBase58(), store })).toMatchObject({ ok: true });
+    expect((await store.listComments(post.id)).length).toBe(0);
+  });
+
+  it("allows one reply and rejects a reply to a reply", async () => {
+    const { store, post } = await makePost();
+    const parent = await createComment({ post, signer: other.publicKey.toBase58(), body: { body: "Parent" }, store });
+    if (!parent.ok) throw new Error(parent.error);
+    const reply = await createComment({ post, signer: owner.publicKey.toBase58(), body: { body: "Reply", parentId: parent.comment.id }, store });
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    expect(reply.comment.parentId).toBe(parent.comment.id);
+    expect(await createComment({ post, signer: other.publicKey.toBase58(), body: { body: "Nested", parentId: reply.comment.id }, store })).toMatchObject({ ok: false, status: 400, code: "nested_reply" });
   });
 
   it("keeps comments hidden while a parent post is deleted", async () => {

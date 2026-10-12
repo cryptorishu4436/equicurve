@@ -21,7 +21,16 @@ type VerifyBody = {
   ok?: boolean;
   verified?: boolean;
   reason?: string | null;
+  source?: string | null;
   checks?: { fingerprint?: boolean; poolConfiguration?: boolean; migrationThreshold?: boolean; readback?: boolean } | null;
+  deployment?: {
+    source?: string;
+    fingerprint?: string;
+    profileName?: string;
+    config?: string;
+    quote?: string;
+    constraintsPassed?: boolean;
+  } | null;
   error?: string | { message?: string };
 };
 
@@ -57,6 +66,22 @@ export function TerminalPanel({ pool }: { pool: string }) {
           Lifecycle comes from the pool account. Verification compares a recorded design with the chain. A failed read stays failed.
         </p>
       </header>
+      <section className="ec-card space-y-2 p-5 text-sm">
+        <h2 className="font-medium text-fg-primary">Provenance</h2>
+        {verify == null ? <p className="text-fg-muted">Reading the recorded design…</p> : null}
+        {verify && !verify.deployment ? <p className="text-fg-muted">No recorded design for this pool. Provenance is unavailable.</p> : null}
+        {verify?.deployment ? (
+          <dl className="grid gap-2 sm:grid-cols-2">
+            <div><dt className="text-fg-muted">Record</dt><dd>{verify.deployment.source ?? verify.source ?? "unknown"}</dd></div>
+            <div><dt className="text-fg-muted">Profile</dt><dd>{verify.deployment.profileName ?? "unnamed"}</dd></div>
+            <div><dt className="text-fg-muted">Quote</dt><dd>{verify.deployment.quote ?? "unlabelled"}</dd></div>
+            <div><dt className="text-fg-muted">Original constraints</dt><dd>{verify.deployment.constraintsPassed == null ? "unknown" : verify.deployment.constraintsPassed ? "met" : "not met"}</dd></div>
+            <div className="sm:col-span-2"><dt className="text-fg-muted">Fingerprint</dt><dd className="break-all font-mono text-xs">{verify.deployment.fingerprint ?? "unavailable"}</dd></div>
+            <div className="sm:col-span-2"><dt className="text-fg-muted">Config</dt><dd className="break-all font-mono text-xs">{verify.deployment.config ?? "unavailable"}</dd></div>
+          </dl>
+        ) : null}
+        <p className="text-xs text-fg-muted">The fingerprint is the recorded design. It is not proof the chain still matches. That is the deployment check below.</p>
+      </section>
       <section className="ec-card space-y-2 p-5 text-sm">
         <h2 className="font-medium text-fg-primary">Lifecycle</h2>
         {market == null ? <p className="text-fg-muted">Reading the pool…</p> : null}

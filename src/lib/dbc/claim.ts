@@ -47,6 +47,19 @@ export function hasClaimableFees(
     || !new BN(breakdown[`${prefix}UnclaimedQuote`]).isZero();
 }
 
+/** A failed or unfinished fee read must not be labeled as an empty pot. */
+export function feeClaimButtonLabel(args: {
+  busy: boolean;
+  known: boolean;
+  claimable: boolean;
+  role: "creator" | "partner";
+}): string {
+  if (args.busy) return "Claiming…";
+  if (!args.known) return "Fee balance unknown";
+  const name = args.role === "creator" ? "creator" : "partner";
+  return args.claimable ? `Claim ${name} fees` : `No ${name} fees to claim`;
+}
+
 function sideFromSdk(side: {
   unclaimedBaseFee: { toString(): string };
   unclaimedQuoteFee: { toString(): string };

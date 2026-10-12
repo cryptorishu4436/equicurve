@@ -25,6 +25,8 @@ export type WalletChallenge = {
   cluster: z.infer<typeof clusterSchema>;
   issuedAt: string;
   expiresAt: string;
+  /** Hostname that issued the challenge. Older challenges omit it. */
+  domain?: string;
   consumedAt?: string;
 };
 
@@ -44,6 +46,23 @@ function productionAuthStore(): AuthStore {
 }
 
 const DOMAIN = "EquiCurve community wallet authentication";
+const LEGACY_AUTH_DOMAIN = "equicurve.community";
+
+export function isAuthDomain(value: string): boolean {
+  if (value === "localhost") return true;
+  return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/.test(value);
+}
+
+/** Hostname from the request that issued the challenge. Falls back only when the header is unusable. */
+export function authDomainFromRequest(req: Request): string {
+  const forwarded = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
+  const host = forwarded.split(",")[0]?.trim().toLowerCase().replace(/:\d+$/, "") ?? "";
+  return isAuthDomain(host) ? host : "equicurve.vercel.app";
+}
+
+function messageDomain(challenge: { domain?: string }): string {
+  return challenge.domain && isAuthDomain(challenge.domain) ? challenge.domain : LEGACY_AUTH_DOMAIN;
+}
 
 function authFilePaths() {
   return {
@@ -60,13 +79,13 @@ function tokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-function authMessage(challenge: Pick<WalletChallenge, "wallet" | "cluster" | "nonce" | "issuedAt" | "expiresAt">): string {
+function authMessage(challenge: Pick<WalletChallenge, "wallet" | "cluster" | "nonce" | "issuedAt" | "expiresAt" | "domain">): string {
   return [
     DOMAIN,
     "This signature authenticates your wallet for short-lived EquiCurve community actions.",
     "It is not a transaction and costs nothing.",
     "",
-    `domain: equicurve.community`,
+    `domain: ${messageDomain(challenge)}`,
     `cluster: ${challenge.cluster}`,
     `wallet: ${challenge.wallet}`,
     `nonce: ${challenge.nonce}`,
@@ -123,12 +142,13 @@ function purge(payload: AuthPayload, nowMs: number): AuthPayload {
   };
 }
 
-export async function issueWalletChallenge(args: { wallet: string; cluster: z.infer<typeof clusterSchema>; nowMs?: number }): Promise<{ challenge: WalletChallenge; message: string }> {
+export async function issueWalletChallenge(args: { wallet: string; cluster: z.infer<typeof clusterSchema>; domain?: string; nowMs?: number }): Promise<{ challenge: WalletChallenge; message: string }> {
   walletSchema.parse(args.wallet);
   const nowMs = args.nowMs ?? Date.now();
   const issuedAt = new Date(nowMs).toISOString();
   const expiresAt = new Date(nowMs + WALLET_CHALLENGE_TTL_MS).toISOString();
-  const challenge: WalletChallenge = { nonce: randomBytes(24).toString("hex"), wallet: args.wallet, cluster: args.cluster, issuedAt, expiresAt };
+  const domain = args.domain && isAuthDomain(args.domain) ? args.domain : undefined;
+  const challenge: WalletChallenge = { nonce: randomBytes(24).toString("hex"), wallet: args.wallet, cluster: args.cluster, issuedAt, expiresAt, ...(domain ? { domain } : {}) };
   if (process.env.NODE_ENV === "production") {
     await productionAuthStore().putChallenge(challenge);
     return { challenge, message: authMessage(challenge) };
