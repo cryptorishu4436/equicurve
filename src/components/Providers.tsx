@@ -12,6 +12,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Connection } from "@solana/web3.js";
 import { getCluster, getDevnetRpcReadUrls, getRpcUrl } from "@/lib/constants";
 import { EXPECTED_CLUSTER_GENESIS_HASH } from "@/lib/connection";
+import {
+  AndroidShellPhantomAdapter,
+  AndroidShellSolflareAdapter,
+  isEquiCurveAndroidShell,
+} from "@/lib/wallet/androidShell";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -54,7 +59,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, []);
 
   const wallets = useMemo(
-    () => [new PhantomWalletAdapter(), new SolflareWalletAdapter({ network })],
+    () =>
+      isEquiCurveAndroidShell()
+        ? [new AndroidShellPhantomAdapter(), new AndroidShellSolflareAdapter({ network })]
+        : [new PhantomWalletAdapter(), new SolflareWalletAdapter({ network })],
     [network],
   );
 
