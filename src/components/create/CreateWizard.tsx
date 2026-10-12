@@ -10,7 +10,7 @@ import { launchCurveConfig, planLaunchAddresses, prepareLaunchTransaction } from
 import { signLaunchPayload, type LaunchAuthPayload, type SignedLaunchBody } from "@/lib/auth/launchAuth";
 import { signSchedulePayload, type ScheduleAuthPayload } from "@/lib/auth/scheduleAuth";
 import { QUOTE_ASSETS } from "@/lib/quotes/catalog";
-import { resolveActiveQuote } from "@/lib/quotes/resolve";
+import { resolveActiveQuote, resolveWizardQuote } from "@/lib/quotes/resolve";
 import { attestGraduation, DLMM_BIN_STEPS } from "@/lib/graduation/plan";
 import { resolvePartnerFeeClaimer } from "@/lib/presets/published";
 import { resolveMetadataUri } from "@/lib/metadata/client";
@@ -62,17 +62,11 @@ import {
 } from "@/lib/dbc/transferHook";
 
 function wizardQuote(state: WizardState) {
-  if (state.quote === "CUSTOM") {
-    const ready = Boolean(state.customQuoteMint && state.customQuoteDecimals);
-    return {
-      mint: ready ? state.customQuoteMint : null,
-      decimals: (state.customQuoteDecimals ?? 9) as 6 | 7 | 8 | 9,
-      available: ready,
-      unavailableReason: ready ? null : "Paste a quote mint and wait for the decimal and badge check.",
-      claim: "Custom quote mint. The launched token is not this asset.",
-    };
-  }
-  return wizardQuote(state);
+  return resolveWizardQuote({
+    quote: state.quote,
+    customQuoteMint: state.customQuoteMint,
+    customQuoteDecimals: state.customQuoteDecimals,
+  });
 }
 
 function graduationNote(state: Parameters<typeof wizardGraduation>[0]): string {

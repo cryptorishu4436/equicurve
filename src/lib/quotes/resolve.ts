@@ -13,6 +13,39 @@ export type ResolvedQuote = {
   issuer: string | null;
 };
 
+export type WizardQuoteResolution = {
+  mint: string | null;
+  decimals: 6 | 7 | 8 | 9;
+  available: boolean;
+  unavailableReason: string | null;
+  claim: string;
+};
+
+export function resolveWizardQuote(input: {
+  quote: QuoteId | "CUSTOM";
+  customQuoteMint?: string;
+  customQuoteDecimals?: 6 | 7 | 8 | 9 | null;
+}): WizardQuoteResolution {
+  if (input.quote === "CUSTOM") {
+    const ready = Boolean(input.customQuoteMint && input.customQuoteDecimals);
+    return {
+      mint: ready ? input.customQuoteMint ?? null : null,
+      decimals: input.customQuoteDecimals ?? 9,
+      available: ready,
+      unavailableReason: ready ? null : "Paste a quote mint and wait for the decimal and badge check.",
+      claim: "Custom quote mint. The launched token is not this asset.",
+    };
+  }
+  const resolved = resolveActiveQuote(input.quote);
+  return {
+    mint: resolved.mint,
+    decimals: resolved.decimals,
+    available: resolved.available,
+    unavailableReason: resolved.unavailableReason,
+    claim: resolved.claim,
+  };
+}
+
 /** Mint EquiCurve will put on a create transaction for the active cluster. */
 export function resolveActiveQuote(id: QuoteId): ResolvedQuote {
   const asset = getQuoteAsset(id);
