@@ -1,5 +1,21 @@
 # EquiCurve
 
+<p align="center">
+  <img src="docs/android-palm.jpg" alt="EquiCurve on a phone, resting in an open hand" width="880">
+</p>
+
+## Launch your token in the palm of your hand
+
+The EquiCurve Android app is the market studio on your phone. Write the brief, review the curve, and launch the configuration you signed.
+
+- **Fast.** Open the app and go from brief to a reviewed launch without a desktop.
+- **Secure.** Phantom or Solflare signs the transaction. The app never holds your keys.
+- **In your hand.** Same studio as the live site: design, trade, and read the pool back from Android 8 or newer.
+
+**[Download EquiCurve for Android](https://github.com/rishu4436/equicurve/releases/download/android-v0.3.5/EquiCurve.apk)** · [Open the live studio](https://equicurve.vercel.app) · [Android source](android/)
+
+The app loads [equicurve.vercel.app](https://equicurve.vercel.app), so it needs a connection. Install the APK directly. It is not a Play Store listing. EquiCurve does not take custody of funds.
+
 EquiCurve is a constrained market-design engine for Meteora DBC launches.
 
 **Current release:** `v0.3.5 — Market Operating & Verification Layer` · [Changelog](./CHANGELOG.md) · [Roadmap](./ROADMAP.md) · [Architecture](./docs/ARCHITECTURE.md)

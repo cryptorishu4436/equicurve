@@ -8,6 +8,10 @@ changes must be documented explicitly.
 
 ## [Unreleased]
 
+### Android
+
+- Added an Android shell for the live studio. Connect opens Phantom or Solflare, and the app does not hold keys.
+
 Planned work belongs in [ROADMAP.md](./ROADMAP.md) and is not considered shipped.
 
 ## [0.3.5] - 2026-10-10
